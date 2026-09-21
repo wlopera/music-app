@@ -1,0 +1,11 @@
+{
+    "carpeta_base": "",
+    "carpeta_temporal": "",
+    "extensiones_permitidas": [
+        ".mp3",
+        ".wav",
+        ".mp4",
+        ".opus"
+    ],
+    "raiz_navegacion": ""
+}

@@ -1,0 +1,54 @@
+cat << 'EOF' > .gitignore
+# ============================================================
+# Gitignore optimizado para tu Music-App en Python
+# ============================================================
+
+# 1. Entorno Virtual (Librerías instaladas)
+.venv/
+venv/
+ENV/
+env/
+ENV_DIR/
+
+# 2. Compilación y Distribución (Archivos del ejecutable .exe)
+build/
+dist/
+*.spec
+
+# 3. Archivos de Registro, Logs e Historial de ejecución
+*.log
+musicapp.log
+
+# 4. Archivos Comprimidos de Respaldo Manual
+*.rar
+*.zip
+*.tar.gz
+*.7z
+
+# 5. Caché de Ejecución de Python
+__pycache__/
+*/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 6. Datos Locales y Bases de Datos Temporales
+*.db
+*.sqlite
+*.sqlite3
+
+# 7. Configuraciones de Editores de Código e IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# 8. Archivos Ocultos del Sistema Operativo
+Thumbs.db
+Desktop.ini
+.DS_Store
+EOF
