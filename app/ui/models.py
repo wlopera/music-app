@@ -14,9 +14,9 @@ COL_F_ORIGINAL = 1
 COL_F_ACTUAL = 2
 COL_TIPO = 3
 COL_TAMANO = 4
-COL_ORIG_NAME = 5
 
-HEADERS = ["Nombre", "F. Original", "F. Actual", "Tipo", "Tamaño", "Nombre original"]
+# CORREGIDO: Removida la última columna de la lista de cabeceras
+HEADERS = ["Nombre", "F. Original", "F. Actual", "Tipo", "Tamaño"]
 
 
 class FileTableModel(QAbstractTableModel):
@@ -112,11 +112,8 @@ class FileTableModel(QAbstractTableModel):
                 return row["ext"].lstrip(".").upper()
             if col == COL_TAMANO:
                 return fsutil.human_size(row["size"])
-            if col == COL_ORIG_NAME:
-                if self.sidecar_name_lookup:
-                    return self.sidecar_name_lookup(row["name"]) or ""
-                return ""
             return ""
+            
         if role == Qt.ItemDataRole.ToolTipRole:
             orig = ""
             if self.sidecar_name_lookup:
@@ -124,12 +121,13 @@ class FileTableModel(QAbstractTableModel):
                 if orig_val:
                     orig = f"\nNombre original: {orig_val}"
             return f"{row['path']}\nTamaño: {fsutil.human_size(row['size'])}{orig}"
+            
         if role == Qt.ItemDataRole.UserRole:
             return row["path"]
+            
         if role == Qt.ItemDataRole.ForegroundRole and col == COL_TIPO:
             return QColor("#4E5568")
-        if role == Qt.ItemDataRole.ForegroundRole and col == COL_ORIG_NAME:
-            return QColor("#5B8DEF")   # azul acento, distingue del nombre final
+            
         if role == Qt.ItemDataRole.TextAlignmentRole and col == COL_TAMANO:
             return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         return None

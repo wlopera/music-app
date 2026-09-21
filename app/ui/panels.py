@@ -95,18 +95,28 @@ class SectionPanel(QFrame):
 
     # --- Internos ----------------------------------------------------------------
     def _apply_expanded_state(self) -> None:
-        """Muestra u oculta el cuerpo y ajusta las restricciones de altura del panel."""
+        """Muestra u oculta el cuerpo adaptando las restricciones para el QSplitter."""
         self.body.setVisible(self._expanded)
         if self._expanded:
-            # Sin restricción: el layout del padre decide cuánto espacio dar
+            # CORREGIDO: Se limpian por completo los límites rígidos previos de altura
             self.setMaximumHeight(16_777_215)
             self.setMinimumHeight(0)
+            
+            # Devolvemos el control elástico total al QSplitter superior
             self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         else:
-            # Sólo el encabezado: márgenes top+bottom (10+4) + header (46) ≈ 60
-            collapsed_h = _HEADER_H + 10 + 4 + 6   # contentsMargins top + header + spacing
-            self.setFixedHeight(collapsed_h)
+            # Sólo el encabezado: cálculo preciso del tamaño colapsado
+            collapsed_h = _HEADER_H + 10 + 4 + 6   
+            
+            # CORREGIDO: En lugar de setFixedHeight (que rompe splitters), se usan límites acoplados
+            self.setMinimumHeight(collapsed_h)
+            self.setMaximumHeight(collapsed_h)
+            
+            # Informamos al layout que esta sección ahora es estricta y rígida temporalmente
             self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            
+        # Forzar la actualización inmediata de la geometría en la interfaz de PyQt6
+        self.updateGeometry()
 
     def _refresh_arrow(self) -> None:
         self.arrow.setText("▲" if self.is_expanded else "▼")
