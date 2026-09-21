@@ -33,10 +33,32 @@ class MainWindow(QMainWindow):
         body.setContentsMargins(14, 0, 14, 14)
         body.setSpacing(10)
 
+        # 1. Barra superior estática (Logo y Configuración)
         self._build_topbar(body)
-        self._build_input_section(body)
-        self._build_control_bar(body)
-        self._build_library_section(body)
+
+        # 2. Un único Splitter Vertical Principal para las dos áreas grandes
+        self.main_vertical_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.main_vertical_splitter.setChildrenCollapsible(False)
+
+        # 3. Construimos los tres bloques de la app de forma independiente
+        self._build_input_section()
+        self._build_control_bar_wrapper() 
+        self._build_library_section()
+
+        # 4. Añadimos solo ENTRADA y BIBLIOTECA dentro del Splitter Móvil Vertical
+        self.main_vertical_splitter.addWidget(self.input_panel)
+        self.main_vertical_splitter.addWidget(self.library_panel)
+
+        # 5. Forzamos los tamaños iniciales del divisor (ENTRADA abre grande por defecto)
+        self.main_vertical_splitter.setSizes([450, 250])
+
+        # 6. Agregamos el splitter vertical móvil al diseño de la ventana
+        body.addWidget(self.main_vertical_splitter, 1)
+
+        # 7. La barra de control ("NOMBRE BASE") se monta abajo, fija y fuera de los scrolls
+        body.addWidget(self.control_bar_container)
+
+        self.central_widget = central
         self.setCentralWidget(central)
 
         self.status_bar = QStatusBar()
@@ -48,7 +70,6 @@ class MainWindow(QMainWindow):
         self._apply_config()
         self._connect_signals()
         self._compact_input = False
-
     # --- Construccion UI -------------------------------------------------------------
     def _build_topbar(self, body: QVBoxLayout) -> None:
         bar = QWidget()
@@ -67,23 +88,24 @@ class MainWindow(QMainWindow):
         b.addWidget(self.settings_btn)
         body.addWidget(bar)
 
-    def _build_input_section(self, body: QVBoxLayout) -> None:
+    def _build_input_section(self) -> None:
         self.input_panel = SectionPanel("ENTRADA · Explorador y Staging", initially_expanded=True)
         split = QSplitter(Qt.Orientation.Horizontal)
         self.navigator = FolderNavigator([])
         self.staging = StagingPanel([])
         split.addWidget(self.navigator)
         split.addWidget(self.staging)
-        split.setSizes([1, 1])
+        
+        # Mueve de forma automática la barra horizontal a la izquierda
+        split.setSizes([260, 960])
         split.setChildrenCollapsible(False)
         self.input_panel.set_body(split)
-        body.addWidget(self.input_panel)
 
-    def _build_control_bar(self, body: QVBoxLayout) -> None:
-        bar = QWidget()
-        bar.setObjectName("controlBar")
-        row = QHBoxLayout(bar)
-        row.setContentsMargins(6, 0, 6, 0)
+    def _build_control_bar_wrapper(self) -> None:
+        self.control_bar_container = QWidget()
+        self.control_bar_container.setObjectName("controlBar")
+        row = QHBoxLayout(self.control_bar_container)
+        row.setContentsMargins(6, 4, 6, 4)
         row.setSpacing(8)
 
         label = QLabel("NOMBRE BASE")
@@ -110,19 +132,18 @@ class MainWindow(QMainWindow):
         self.control_note.setObjectName("mutedLabel")
         row.addWidget(self.control_note)
 
-        body.addWidget(bar)
-
-    def _build_library_section(self, body: QVBoxLayout) -> None:
+    def _build_library_section(self) -> None:
         self.library_panel = SectionPanel("BIBLIOTECA · Base y Versiones", initially_expanded=True)
         split = QSplitter(Qt.Orientation.Horizontal)
         self.folder_list = FolderListView()
         self.detail = self._make_library_detail()
         split.addWidget(self.folder_list)
         split.addWidget(self.detail)
-        split.setSizes([1, 2])
+        
+        # Mueve la barra horizontal inferior a la izquierda de forma automática
+        split.setSizes([260, 960])
         split.setChildrenCollapsible(False)
         self.library_panel.set_body(split)
-        body.addWidget(self.library_panel)
 
     def _make_library_detail(self):
         from app.ui.file_table import FileTableView
@@ -154,8 +175,6 @@ class MainWindow(QMainWindow):
         if nav and Path(nav).is_dir():
             self.navigator.set_root(Path(nav))
         else:
-            # Siempre debe haber una raiz para que el campo "buscar" funcione:
-            # si no hay raiz configurada, usa la carpeta base (o el inicio).
             self.navigator.set_root(Path(default_nav) if Path(default_nav).is_dir() else Path.home())
 
         base = self.config.carpeta_base
@@ -163,8 +182,6 @@ class MainWindow(QMainWindow):
             self.folder_list.set_root(Path(base))
             self.detail.set_directory(None)
         else:
-            # Sin carpeta base, el listado de canciones tambien muestra el inicio
-            # para que su filtro siga funcionando hasta configurar la base.
             self.folder_list.set_root(Path.home())
             self.detail.set_directory(None)
 
@@ -177,7 +194,6 @@ class MainWindow(QMainWindow):
     def _refresh_counts(self) -> None:
         self.input_panel.set_count(f"{self.staging.count()} copias listas")
         self.library_panel.set_count("")
-
     # --- Senales ----------------------------------------------------------------------
     def _connect_signals(self) -> None:
         self.folder_list.folderSelected.connect(self._show_song_folder)
@@ -203,6 +219,7 @@ class MainWindow(QMainWindow):
 
     def _copy_to_staging(self, paths) -> None:
         added = self.staging.copy_paths(list(paths))
+
         if added:
             self._set_status(f"{added} copia(s) agregada(s) al staging.", 4000)
 
@@ -221,7 +238,7 @@ class MainWindow(QMainWindow):
         try:
             modal = MediaModal(Path(path), self)
             modal.exec()
-        except Exception as exc:  # noqa: BLE001 - nunca dejar morir la app en el reproductor
+        except Exception as exc:
             logger.error("error al abrir el reproductor de %s: %s", path, exc, exc_info=True)
             QMessageBox.critical(
                 self, "Error de reproducción",
@@ -387,15 +404,8 @@ class MainWindow(QMainWindow):
         staging_ok = self.staging.count() > 0
         self.process_btn.setEnabled(name_ok and base_ok and staging_ok)
 
-    def closeEvent(self, event) -> None:  # noqa: N802
+    def closeEvent(self, event) -> None: 
         event.accept()
 
-    def showEvent(self, event) -> None:  # noqa: N802
+    def showEvent(self, event) -> None: 
         super().showEvent(event)
-        if not self._compact_input:
-            self._compact_input = True
-            QTimer.singleShot(80, self._compact_input_panel)
-
-    def _compact_input_panel(self) -> None:
-        height = self.input_panel.height()
-        self.input_panel.setMaximumHeight(max(200, height - 260))

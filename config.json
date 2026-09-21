@@ -1,11 +1,11 @@
 {
-    "carpeta_base": "",
-    "carpeta_temporal": "",
+    "carpeta_base": "C:/2026/prueba/origen",
+    "carpeta_temporal": "C:/2026/music/temp",
     "extensiones_permitidas": [
         ".mp3",
         ".wav",
         ".mp4",
         ".opus"
     ],
-    "raiz_navegacion": ""
+    "raiz_navegacion": "C:/Personal/2025/Fotos/will-music-IMP"
 }

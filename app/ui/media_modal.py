@@ -58,13 +58,14 @@ class MediaModal(QDialog):
         self.setWindowTitle(self.file_path.name)
         self._seeking = False
         self._total_ms = 0
+        self._expanded_mode = False 
         logger.info("abriendo modal multimedia: %s (video=%s)",
                     self.file_path, self.is_video)
 
         if self.is_video:
-            self.resize(760, 200)
+            self.resize(1020, 680)
         else:
-            self.resize(430, 185)
+            self.resize(450, 185)
 
         self.setStyleSheet("""
 QDialog { background-color: #02123d; }
@@ -74,7 +75,7 @@ QLabel { background-color: transparent; color: #E6ECFA; }
 QSlider::groove:horizontal { background: #243464; height: 6px; border-radius: 3px; }
 QSlider::handle:horizontal { background: #FFFFFF; border: 2px solid #3D5AA8; width: 13px; height: 13px; margin: -5px 0; border-radius: 7px; }
 QSlider::sub-page:horizontal { background: #3D5AA8; border-radius: 3px; }
-QPushButton { background-color: #0F2453; color: #E6ECFA; border: 1px solid #2A3F7A; border-radius: 9px; padding: 7px 16px; font-weight: 700; }
+QPushButton { background-color: #0F2453; color: #E6ECFA; border: 1px solid #2A3F7A; border-radius: 9px; padding: 7px 12px; font-weight: 700; font-size: 9pt; }
 QPushButton:hover { background-color: #163061; }
 QPushButton:pressed { background-color: #081638; }
 QPushButton:disabled { background-color: #0B1A40; color: #66749C; border-color: #1A2B57; }
@@ -96,10 +97,10 @@ QPushButton#btnDanger:hover { background-color: #3A1622; color: #FF6B70; }
         self.error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.error_label.setWordWrap(True)
         layout.addWidget(self.error_label)
-
         if self.is_video:
             self.video_widget = QVideoWidget()
-            self.video_widget.setStyleSheet("background: #02123d; border-radius: 8px;")
+            self.video_widget.setStyleSheet("background: #000000; border-radius: 8px;")
+            self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
             layout.addWidget(self.video_widget, 1)
         else:
             self.wave = _WaveformWidget(self.file_path)
@@ -118,20 +119,47 @@ QPushButton#btnDanger:hover { background-color: #3A1622; color: #FF6B70; }
         layout.addWidget(self.slider)
 
         controls = QHBoxLayout()
-        controls.setSpacing(10)
+        controls.setSpacing(8)
         controls.addStretch(1)
+
+        # Botón para conmutar Aspect Ratio (Solo visible en videos)
+        self.zoom_btn = QPushButton("⛶ Ajustar")
+        self.zoom_btn.setObjectName("btnOutline")
+        self.zoom_btn.setFixedSize(85, 44)
+        self.zoom_btn.clicked.connect(self._toggle_aspect_ratio)
+        if not self.is_video:
+            self.zoom_btn.setVisible(False)
+        controls.addWidget(self.zoom_btn)
+
+        # NUEVO: Botón Retroceder 10 Segundos
+        self.back_btn = QPushButton("⏪ -10s")
+        self.back_btn.setObjectName("btnOutline")
+        self.back_btn.setFixedSize(70, 44)
+        self.back_btn.clicked.connect(lambda: self._skip_bytes(-10000))
+        controls.addWidget(self.back_btn)
+
         self.play_btn = QPushButton("▶")
         self.play_btn.setObjectName("btnOutline")
         self.play_btn.setFixedSize(44, 44)
         self.play_btn.clicked.connect(self._toggle_play)
+
         self.stop_btn = QPushButton("⏹")
         self.stop_btn.setObjectName("btnOutline")
         self.stop_btn.setFixedSize(44, 44)
         self.stop_btn.clicked.connect(self._stop)
+
+        # NUEVO: Botón Adelantar 10 Segundos
+        self.forward_btn = QPushButton("+10s ⏩")
+        self.forward_btn.setObjectName("btnOutline")
+        self.forward_btn.setFixedSize(70, 44)
+        self.forward_btn.clicked.connect(lambda: self._skip_bytes(10000))
+        controls.addWidget(self.forward_btn)
+
         self.close_btn = QPushButton("❌")
         self.close_btn.setObjectName("btnDanger")
         self.close_btn.setFixedSize(44, 44)
         self.close_btn.clicked.connect(self.reject)
+        
         controls.addWidget(self.play_btn)
         controls.addWidget(self.stop_btn)
         controls.addWidget(self.close_btn)
@@ -150,6 +178,8 @@ QPushButton#btnDanger:hover { background-color: #3A1622; color: #FF6B70; }
         self.player.mediaStatusChanged.connect(self._on_media_status)
 
         self.play_btn.setEnabled(False)
+        self.back_btn.setEnabled(False)
+        self.forward_btn.setEnabled(False)
         self._load_media()
 
 # --- Carga / control -----------------------------------------------------------
@@ -157,6 +187,28 @@ QPushButton#btnDanger:hover { background-color: #3A1622; color: #FF6B70; }
         logger.info("cargando fuente: %s", self.file_path)
         self.player.setSource(QUrl.fromLocalFile(str(self.file_path)))
         logger.info("setSource enviado")
+
+    # NUEVA FUNCIÓN: Salta el tiempo hacia adelante o atrás controlando los límites
+    def _skip_bytes(self, ms_to_skip: int) -> None:
+        current_pos = self.player.position()
+        new_pos = max(0, min(self._total_ms, current_pos + ms_to_skip))
+        logger.info("Salto temporal de %d ms a %d ms", ms_to_skip, new_pos)
+        self.player.setPosition(new_pos)
+        self.slider.setValue(new_pos)
+
+    def _toggle_aspect_ratio(self) -> None:
+        if not self.is_video:
+            return
+        if self._expanded_mode:
+            self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+            self.zoom_btn.setText("⛶ Ajustar")
+            self._expanded_mode = False
+            logger.info("Modo de aspecto: Original (Barra)")
+        else:
+            self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding)
+            self.zoom_btn.setText("🗗 Original")
+            self._expanded_mode = True
+            logger.info("Modo de aspecto: Expandido Máximo")
 
     @staticmethod
     def _format(ms: int) -> str:
@@ -190,8 +242,6 @@ QPushButton#btnDanger:hover { background-color: #3A1622; color: #FF6B70; }
             logger.info("play")
 
     def _stop(self) -> None:
-        # NUNCA usar QMediaPlayer.stop(): en Windows puede bloquear la UI con medios
-        # reales. Se pausa y se rebobina; el backend se cierra al destruir el player.
         logger.info("stop (pausa + rebobinar)")
         self.player.pause()
         self.player.setPosition(0)
@@ -202,9 +252,13 @@ QPushButton#btnDanger:hover { background-color: #3A1622; color: #FF6B70; }
         logger.debug("mediaStatusChanged -> %s", status.name)
         if status == QMediaPlayer.MediaStatus.LoadedMedia:
             self.play_btn.setEnabled(True)
+            self.back_btn.setEnabled(True)
+            self.forward_btn.setEnabled(True)
 
     def _on_error(self, error, error_string) -> None:
         self.play_btn.setEnabled(False)
+        self.back_btn.setEnabled(False)
+        self.forward_btn.setEnabled(False)
         if error == QMediaPlayer.Error.NoError:
             return
         code = error.name if hasattr(error, "name") else str(error)
@@ -212,7 +266,6 @@ QPushButton#btnDanger:hover { background-color: #3A1622; color: #FF6B70; }
         msg = (f"Error multimedia ({code}).\n{error_string}")
         self.error_label.setText(msg)
 
-    # --- Cierre seguro ---------------------------------------------------------------
     def closeEvent(self, event) -> None:  # noqa: N802
         self._release()
         super().closeEvent(event)
@@ -223,9 +276,6 @@ QPushButton#btnDanger:hover { background-color: #3A1622; color: #FF6B70; }
         super().reject()
 
     def _release(self) -> None:
-        # No llamar a stop()/setSource(QUrl()) con el backend multimedia activo:
-        # en Windows pueden bloquear la UI. Basta con pausar; el backend se cierra
-        # de forma fiable cuando el QMediaPlayer se destruye junto al dialogo.
         try:
             self.player.pause()
         except RuntimeError:
