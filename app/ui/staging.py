@@ -42,32 +42,14 @@ class StagingPanel(QWidget):
         self.extensions = list(extensions)
         self.directory: Optional[Path] = None
 
+        # CORREGIDO: Rediseño del layout vertical eliminando el espacio del header antiguo
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 10, 14, 12)
+        layout.setContentsMargins(14, 0, 14, 12)
         layout.setSpacing(8)
 
-        # El panel completo acepta drops (los margenes, el aviso "arrastra..." y las
-        # zonas fuera de la tabla) para que soltar SIEMPRE funcione. La tabla lo
-        # gestiona aparte via su propio dropEvent.
         self.setAcceptDrops(True)
 
-        header = QHBoxLayout()
-        header.setSpacing(8)
-        self.count_badge = QLabel("0 listos")
-        self.count_badge.setObjectName("countBadge")
-        self.delete_btn = QPushButton("Borrar seleccionadas")
-        self.delete_btn.setObjectName("btnDanger")
-        self.delete_btn.setEnabled(False)
-        self.delete_btn.clicked.connect(self._delete_selected)
-        self.clear_btn = QPushButton("Vaciar todo")
-        self.clear_btn.setObjectName("btnOutline")
-        self.clear_btn.clicked.connect(self._clear_all)
-        header.addWidget(self.count_badge)
-        header.addStretch(1)
-        header.addWidget(self.clear_btn)
-        header.addWidget(self.delete_btn)
-        layout.addLayout(header)
-
+        # CORREGIDO: Se eliminó el layout 'header', los botones físicos y la etiqueta '0 listos'
         self.table = FileTableView(extensions, parent=self)
         self.table.setAcceptDrops(True)
         self.table.accept_file_drops = True
@@ -84,15 +66,12 @@ class StagingPanel(QWidget):
         self.empty_label.setObjectName("mutedLabel")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.empty_label)
-        # Blindaje total del drag & drop: tanto la etiqueta como TODA la cadena de
-        # contenedores (splitter, section, ventana) aceptan drops y los reenvian aqui.
-        # Asi el punto en que se suelte NUNCA queda como punto ciego.
+
         self._forwarding_ancestors: set = set()
         self.empty_label.setAcceptDrops(True)
         self.empty_label.installEventFilter(self)
         self._install_drop_forwarders()
-        # La app real crea el panel sin padre; el splitter lo adoptara despues del
-        # __init__, asi que re-instalamos la cadena en el siguiente ciclo.
+
         if self.parentWidget() is None:
             QTimer.singleShot(0, self._install_drop_forwarders)
 
@@ -109,11 +88,12 @@ class StagingPanel(QWidget):
 
     # --- Estado --------------------------------------------------------------------
     def set_directory(self, directory: Path) -> None:
-        self.directory = directory
-        if not directory.exists():
-            directory.mkdir(parents=True, exist_ok=True)
-        self.table.set_directory(directory)
-        self._update_counts()
+        with logs.track(logger, f"staging: set_directory {directory}"):
+            self.directory = directory
+            if not directory.exists():
+                directory.mkdir(parents=True, exist_ok=True)
+            self.table.set_directory(directory)
+            self._update_counts()
 
     def set_extensions(self, extensions: list[str]) -> None:
         self.extensions = list(extensions)
@@ -128,10 +108,6 @@ class StagingPanel(QWidget):
         return len(self.table.model.rows)
 
     def _update_counts(self) -> None:
-        self.count_badge.setText(f"{self.count()} listos")
-        # Habilitado siempre que haya archivos: con seleccion borra las filas
-        # marcadas y sin seleccion informa al usuario.
-        self.delete_btn.setEnabled(self.count() > 0)
         self._update_empty_state()
 
     def _update_empty_state(self) -> None:
@@ -146,7 +122,6 @@ class StagingPanel(QWidget):
 
     # --- Drag & drop ----------------------------------------------------------------
     def eventFilter(self, obj, event):  # noqa: N802
-        """Reenvia drags/drops que lleguen a la etiqueta o a los contenedores padres."""
         t = event.type()
         if t == QEvent.Type.DragEnter:
             self.dragEnterEvent(event)
@@ -190,12 +165,11 @@ class StagingPanel(QWidget):
             logger.info("drop sobre el panel: %d URL(s) en payload -> %d archivo(s)",
                         event.mimeData().urls().__len__(), len(paths))
             event.acceptProposedAction()
-        except Exception as exc:  # noqa: BLE001 - jamas romper el protocolo de arrastre
+        except Exception as exc:  # noqa: BLE001
             logger.error("drop del panel fallo en la preparacion: %s", exc, exc_info=True)
             event.ignore()
             return
         self._drop_paths(paths)
-
     def _drop_paths(self, paths: list[Path]) -> None:
         if not self.directory:
             logger.warning("drop/copia ignorada: sin carpeta temporal")
@@ -250,12 +224,10 @@ class StagingPanel(QWidget):
         dst = unique_target(self.directory, src.name)
 
         def pump() -> None:
-            # Mantiene la UI responsiva mientras copia archivos grandes.
             QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
                                        | QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers)
 
         fsutil.copy_file_responsive(src, dst, yield_cb=pump)
-        # Preserva la fecha de generacion original en la copia del staging
         if self.directory is not None:
             fsutil.set_creation_time_windows(dst, fsutil.get_creation_time(src))
         logger.debug("copiado %s -> %s", src, dst)
@@ -266,6 +238,8 @@ class StagingPanel(QWidget):
         if not paths:
             self.statusMessage.emit("Selecciona las filas que quieras borrar del staging.")
             return
+        logger.info("staging: borrar %d seleccionada(s) -> %s", len(paths),
+                    [p.name for p in paths])
         resp = QMessageBox.question(
             self, "Borrar copias del staging",
             f"¿Borrar {len(paths)} copia(s) del staging?\n(Solo se eliminan las copias, "
@@ -273,6 +247,7 @@ class StagingPanel(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No)
         if resp != QMessageBox.StandardButton.Yes:
+            logger.info("staging: borrado cancelado por el usuario")
             return
         failed = []
         for p in paths:
@@ -283,6 +258,7 @@ class StagingPanel(QWidget):
     def _clear_all(self) -> None:
         if self.count() == 0:
             return
+        logger.info("staging: vaciar todo (%d copia(s))", self.count())
         resp = QMessageBox.question(
             self, "Vaciar staging",
             "¿Eliminar TODAS las copias del staging?\n(Solo se eliminan las copias, "
@@ -290,27 +266,24 @@ class StagingPanel(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No)
         if resp != QMessageBox.StandardButton.Yes:
+            logger.info("staging: vaciado cancelado por el usuario")
             return
         to_delete = [p for p in self.directory.iterdir()] if self.directory else []
         failed = []
         for p in to_delete:
             if p.is_file() and not self._unlink_retry(p):
                 failed.append(p)
-        self.delete_btn.setEnabled(False)
         self._report_delete_result(len(to_delete), len(failed), failed)
 
     def _unlink_retry(self, path: Path, attempts: int = 5, delay_sec: float = 0.15) -> bool:
-        """Borra con reintentos breves por si el archivo esta bloqueado de forma
-        temporal (p. ej. el reproductor deja al backend multimedia con el handle
-        abierto unos instantes)."""
         for i in range(attempts):
             try:
                 path.unlink()
-                logger.info("borrado %s", path)
+                logger.info("staging: borrado OK %s (intento %d)", path, i + 1)
                 return True
             except OSError as exc:
+                logger.warning("staging: borrado fallo %s (intento %d): %s", path, i + 1, exc)
                 if i >= attempts - 1:
-                    logger.error("no se pudo borrar %s: %s", path, exc)
                     return False
                 time.sleep(delay_sec)
         return False

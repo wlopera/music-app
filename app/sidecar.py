@@ -22,6 +22,10 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
+from app import logs
+
+logger = logs.get_logger("sidecar")
+
 SIDECAR_FILENAME = ".musicapp.json"
 
 
@@ -44,7 +48,8 @@ class Sidecar:
             if not isinstance(data, dict) or not isinstance(data.get("files"), dict):
                 return {"version": 2, "files": {}}
             return data
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("sidecar %s ilegible (%s); se usa vacio", self.path, exc)
             return {"version": 2, "files": {}}
 
     def write(self, data: dict[str, Any]) -> None:
@@ -54,8 +59,10 @@ class Sidecar:
             with tmp.open("w", encoding="utf-8") as fh:
                 json.dump(data, fh, indent=2, ensure_ascii=False)
             tmp.replace(self.path)
-        except OSError:
-            pass
+            logger.debug("sidecar escrito: %s (%d entrada(s))",
+                         self.path, len(data.get("files", {})))
+        except OSError as exc:
+            logger.error("no se pudo escribir el sidecar %s: %s", self.path, exc)
 
     # --- Helpers: Fecha original -------------------------------------------------
     def get_original_ct(self, filename: str) -> Optional[float]:

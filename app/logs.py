@@ -13,8 +13,9 @@ import logging
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 _LOG_FILE_NAME = "musicapp.log"
 _HEARTBEAT = {"ts": 0.0, "label": "inicio"}
@@ -57,6 +58,31 @@ def note(label: str) -> None:
     """Marca actividad del hilo principal (para el watchdog)."""
     _HEARTBEAT["ts"] = time.monotonic()
     _HEARTBEAT["label"] = label
+
+
+@contextmanager
+def track(logger: logging.Logger, label: str, level: int = logging.INFO) -> Iterator[None]:
+    """Trazado de un proceso: registra el 'inicio', espera y registra el 'fin' con duracion.
+
+    Uso (en frontend y backend):
+        with logs.track(logger, "borrar archivo X"):
+            ...
+    Si ocurre una excepcion, se registra el tiempo parcial antes de propagarla.
+    """
+    start = time.monotonic()
+    logger.log(level, ">> %s ...inicio", label)
+    try:
+        yield
+    except BaseException:
+        logger.log(level, ">> %s ...ERROR a los %.3fs", label, time.monotonic() - start)
+        raise
+    else:
+        logger.log(level, ">> %s ...fin (%.3fs)", label, time.monotonic() - start)
+
+
+def elapsed_ms(start: float) -> float:
+    """Milisegundos transcurridos desde `start` (sirve para tiempos parciales)."""
+    return (time.monotonic() - start) * 1000.0
 
 
 def install_crash_hooks(log_path: Path) -> None:

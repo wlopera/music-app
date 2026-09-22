@@ -26,7 +26,15 @@ def main() -> int:
     from app.ui.main_window import MainWindow
 
     root = app_root()
-    log_path = logs.setup_logging(root)
+    # Ubicacion fija del log para monitoreo: dist\Music-App\musicapp.log. Incluso al
+    # ejecutar desde el codigo fuente (no empaquetado) se escribe en la misma carpeta
+    # del .exe de produccion, salvo que esa carpeta no exista aun.
+    log_base = root
+    if not getattr(sys, "frozen", False):
+        dist_log = root / "dist" / "Music-App"
+        if dist_log.is_dir():
+            log_base = dist_log
+    log_path = logs.setup_logging(log_base)
     logs.install_crash_hooks(log_path)
     log = logs.get_logger("main")
     log.info("=== INICIO Music-App ===")
@@ -56,25 +64,11 @@ def main() -> int:
 
     apply_theme(app)
 
-    # Config persistente: en %APPDATA%/Music-App cuando se esta empaquetado, asi los
-    # rebuilds del .exe no borran config.json (migra la legacy de una sola vez).
-    config_dir = root
-    legacy_cfg = root / "config.json"
-    if getattr(sys, "frozen", False):
-        user_dir = Path(os.environ.get("APPDATA") or str(Path.home())) / "Music-App"
-        user_dir.mkdir(parents=True, exist_ok=True)
-        if not (user_dir / "config.json").exists() and legacy_cfg.exists():
-            import shutil
-
-            try:
-                shutil.copyfile(legacy_cfg, user_dir / "config.json")
-                log.info("config migrada de %s a %s", legacy_cfg, user_dir / "config.json")
-            except OSError as exc:
-                log.warning("no se pudo migrar la config: %s", exc)
-        config_dir = user_dir
-
-    config = ConfigManager(config_dir)
-    log.info("config carpeta_base=%r temporal=%r raiz_nav=%r",
+    # Config persistente portable: junto al .exe (o en la raiz del proyecto al correr
+    # desde el codigo fuente). El build repone una plantilla con campos vacios si falta,
+    # de modo que el usuario configure sus datos desde ⚙ Config.
+    config = ConfigManager(root)
+    log.info("config %s: carpeta_base=%r temporal=%r raiz_nav=%r", config.path,
              config.carpeta_base, config.carpeta_temporal, config.raiz_navegacion)
 
     window = MainWindow(config)

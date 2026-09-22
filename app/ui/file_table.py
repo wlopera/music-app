@@ -1,4 +1,4 @@
-"""Tabla de archivos reutilizable (5 columnas Explorer, ordenable, filtrable)."""
+"""Tabla de archivos reutilizable (columnas Explorer ajustables, ordenable, filtrable)."""
 
 import re
 import struct
@@ -171,11 +171,11 @@ class FileTableView(QTableView):
         hh = self.horizontalHeader()
         hh.setHighlightSections(False)
         hh.setStretchLastSection(False)
-        # Col 0 (Nombre) absorbe el espacio sobrante; las demas tienen ancho fijo
-        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col, w in ((1, 148), (2, 148), (3, 52), (4, 80), (5, 190)):
-            hh.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
-            self.setColumnWidth(col, w)
+        # Columnas ajustables con el raton (arrastrar los separadores de la cabecera)
+        hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        for col, w in ((0, 240), (1, 150), (2, 150), (3, 60), (4, 90), (5, 220)):
+            if col < self.model.columnCount():
+                self.setColumnWidth(col, w)
 
         self._click_guard = False
         self.doubleClicked.connect(self._on_double_clicked)
@@ -189,9 +189,12 @@ class FileTableView(QTableView):
             self.set_filter("")
         self.model.set_directory(directory)
         self.sortByColumn(COL_NOMBRE, Qt.SortOrder.AscendingOrder)
+        logger.info("tabla: directorio -> %s (%d fila(s))",
+                    directory, len(self.model.rows))
 
     def set_filter(self, text: str) -> None:
         self.proxy.setFilterFixedString(text)
+        logger.debug("tabla: filtro -> %r", text)
 
     def set_extensions(self, extensions: list[str]) -> None:
         self.extensions = list(extensions)

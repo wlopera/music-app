@@ -4,10 +4,14 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+from app import logs
+
+logger = logs.get_logger("config")
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "carpeta_base": "",
     "carpeta_temporal": "",
-    "extensiones_permitidas": [".mp3", ".wav", ".mp4", ".opus"],
+    "extensiones_permitidas": [".mp3", ".wav", ".mp4", ".opus", ".mov", ".avi", ".mkv"],
     "raiz_navegacion": "",
 }
 
@@ -29,15 +33,19 @@ class ConfigManager:
                 with self.path.open("r", encoding="utf-8") as fh:
                     raw = json.load(fh)
                 self.data = {**DEFAULT_CONFIG, **{k: v for k, v in raw.items() if k in DEFAULT_CONFIG}}
+                logger.debug("config cargada de %s (%d clave(s))", self.path, len(self.data))
                 return
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.error("config %s corrupta/inaccesible (%s); usando valores por defecto", self.path, exc)
                 self.data = dict(DEFAULT_CONFIG)
         else:
             self.data = dict(DEFAULT_CONFIG)
             self.save()
+            logger.info("config auto-generada en %s", self.path)
 
     def save(self) -> None:
         self.path.write_text(json.dumps(self.data, indent=4, ensure_ascii=False), encoding="utf-8")
+        logger.debug("config guardada en %s: %s", self.path, {k: v for k, v in self.data.items()})
 
     # --- Propiedades esenciales -------------------------------------------------
     @property

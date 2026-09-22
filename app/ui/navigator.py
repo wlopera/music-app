@@ -151,6 +151,7 @@ class FolderNavigator(QWidget):
             item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_DriveHDIcon))
             item.setToolTip(0, str(root))
             self.tree.addTopLevelItem(item)
+        logger.info("navegador: vista de unidades (%d)", self.tree.topLevelItemCount())
 
     def _populate(self, folder: Path) -> None:
         text = self.filter_edit.text().strip().lower()
@@ -182,6 +183,9 @@ class FolderNavigator(QWidget):
             hint.setFlags(Qt.ItemFlag.NoItemFlags)
             hint.setForeground(0, self.palette().placeholderText())
             self.tree.addTopLevelItem(hint)
+        else:
+            logger.info("navegador: %s -> %d carpeta(s), %d archivo(s)",
+                        folder, len(folders), len(files))
 
     def _search(self, root: Path, text: str) -> None:
         """Busqueda recursiva de carpetas y archivos permitidos bajo `root`."""
@@ -387,9 +391,11 @@ class FolderListView(QWidget):
             item.setData(0, Qt.ItemDataRole.UserRole, d)
             item.setIcon(0, dir_icon)
             self.tree.addTopLevelItem(item)
+        logger.info("biblioteca: %s -> %d carpeta(s)", self.current, self.tree.topLevelItemCount())
 
     def go_up(self) -> None:
         if self.current and self.current.parent:
+            logger.info("biblioteca: subir a %s", self.current.parent)
             self.set_root(self.current.parent)
 
     def _path_at(self, item: QTreeWidgetItem) -> Optional[Path]:
@@ -399,11 +405,13 @@ class FolderListView(QWidget):
     def _on_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
         path = self._path_at(item)
         if path is not None:
+            logger.info("biblioteca: seleccionar carpeta %s", path)
             self.folderSelected.emit(path)
 
     def _on_double_clicked(self, item: QTreeWidgetItem, _column: int) -> None:
         path = self._path_at(item)
         if path is not None:
+            logger.info("biblioteca: entrar en %s", path)
             self.folderSelected.emit(path)
             self.set_root(path)
 

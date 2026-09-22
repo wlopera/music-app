@@ -3,6 +3,10 @@
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
+from app import logs
+
+logger = logs.get_logger("panels")
+
 _HEADER_H = 46   # altura fija del encabezado cuando el panel está colapsado
 
 
@@ -84,6 +88,7 @@ class SectionPanel(QFrame):
             self._expanded = expanded
             self._apply_expanded_state()
             self._refresh_arrow()
+            logger.info("panel %r %s", self.title_label.text(), "expandido" if expanded else "colapsado")
             self.toggled.emit(expanded)
 
     def toggle(self) -> None:

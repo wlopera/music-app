@@ -5,6 +5,7 @@ staging y con los archivos de la carpeta definitiva de la cancion.
 """
 
 import shutil
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,35 +85,55 @@ def build_plan(song_name: str, base_dir: Path, stag_dir: Path, extensions: list[
     """Planifica el orden final de versiones (sin ejecutar nada)."""
     song_name = song_name.strip()
     if not song_name:
+        logger.debug("build_plan ignorado: nombre vacio")
         return None
     target_dir = (Path(base_dir) / song_name)
     if not Path(base_dir).is_dir():
         raise FileNotFoundError(f"La carpeta base no existe: {base_dir}")
 
-    staging_entries = collect_staging_entries(stag_dir, extensions)
-    target_entries = collect_target_entries(target_dir, extensions)
-    logger.info("build_plan '%s': %d del staging, %d existentes en %s",
-                song_name, len(staging_entries), len(target_entries), target_dir)
+    with logs.track(logger, f"build_plan '{song_name}'"):
+        staging_entries = collect_staging_entries(stag_dir, extensions)
+        target_entries = collect_target_entries(target_dir, extensions)
+        logger.info("build_plan '%s': %d del staging, %d existentes en %s",
+                    song_name, len(staging_entries), len(target_entries), target_dir)
 
-    if not staging_entries:
-        return None  # no hay nada nuevo que procesar
+        if not staging_entries:
+            return None  # no hay nada nuevo que procesar
 
-    merged = target_entries + staging_entries
-    merged.sort(key=lambda e: (e.original_ct, e.name.lower()))
+        merged = target_entries + staging_entries
+        merged.sort(key=lambda e: (e.original_ct, e.name.lower()))
 
-    plan = ProcessPlan(song_name=song_name, target_dir=target_dir)
-    for i, e in enumerate(merged, start=1):
-        final = f"{song_name}_v{i}{e.ext}"
-        plan.files.append(PlannedFile(
-            index=i, final_name=final, ext=e.ext, original_ct=e.original_ct,
-            source_path=e.path, from_staging=e.from_staging,
-            source_name=e.name))   # preservar el nombre antes del renombrado
-    return plan
+        plan = ProcessPlan(song_name=song_name, target_dir=target_dir)
+        for i, e in enumerate(merged, start=1):
+            final = f"{song_name}_v{i}{e.ext}"
+            plan.files.append(PlannedFile(
+                index=i, final_name=final, ext=e.ext, original_ct=e.original_ct,
+                source_path=e.path, from_staging=e.from_staging,
+                source_name=e.name))   # preservar el nombre antes del renombrado
+        logger.info("build_plan '%s': plan de %d version(es), %d desde staging",
+                    song_name, len(plan.files), plan.staging_count)
+        return plan
+
+
+def _rename_with_retry(src: Path, dst: Path, attempts: int = 5, delay: float = 0.20) -> None:
+    """Intenta renombrar un archivo aplicando pausas si está bloqueado por el reproductor."""
+    for i in range(attempts):
+        try:
+            src.rename(dst)
+            return
+        except PermissionError as exc:
+            if i >= attempts - 1:
+                logger.error("Fallo definitivo al renombrar archivo bloqueado: %s", src)
+                raise exc
+            logger.warning("Archivo bloqueado '%s'. Reintento %d/%d en %ss...", src.name, i+1, attempts, delay)
+            time.sleep(delay)
 
 
 def execute_plan(plan: ProcessPlan, extensions: list[str]) -> dict:
     """Ejecuta la fusion: mueve/renombra por fecha original y escribe el sidecar."""
     target_dir = plan.target_dir
+    t0 = time.monotonic()
+    logger.info("execute_plan: INICIO %d archivo(s) hacia %s", len(plan.files), target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     # Fase 1: liberar todos los nombres hacia temporales unicos en su mismo dir
@@ -120,18 +141,21 @@ def execute_plan(plan: ProcessPlan, extensions: list[str]) -> dict:
     staging_tmps: list[tuple[Path, Path, str]] = []  # (tmp_path in staging, staging_dir, final_name)
 
     moved = 0
-    logger.info("execute_plan: %d archivo(s) hacia %s", len(plan.files), target_dir)
     renamed_existing = 0
     for item in plan.files:
         src = item.source_path
         tmp = src.parent / f".__mv_{uuid.uuid4().hex}__{src.name}"
-        src.rename(tmp)
+        # CORREGIDO: Se aplica el motor de reintentos para esquivar el WinError 32
+        _rename_with_retry(src, tmp)
         logger.debug("  temp-rename: %s -> %s", src.name, tmp.name)
         if item.from_staging:
             staging_tmps.append((tmp, src.parent, item.final_name))
         else:
             pending_moves.append((tmp, item.final_name))
             renamed_existing += 1
+
+    logger.info("execute_plan: fase1 renombrados (%d temporales: %d staging, %d destino) en %.2fs",
+                len(plan.files), len(staging_tmps), len(pending_moves), time.monotonic() - t0)
 
     # Fase 2: mover temporales del staging hacia el destino con su nombre final
     for tmp, src_dir, final_name in staging_tmps:
@@ -143,7 +167,8 @@ def execute_plan(plan: ProcessPlan, extensions: list[str]) -> dict:
     # Fase 3: renombrar temporales del destino a su nombre final
     for tmp, final_name in pending_moves:
         dst = target_dir / final_name
-        tmp.replace(dst)
+        # También aplicamos tolerancia al restaurar los nombres definitivos de la carpeta destino
+        _rename_with_retry(tmp, dst)
         logger.info("  renombrado existente: %s -> %s", tmp.name, final_name)
 
     # Fase 4: restaurar fechas originales + escribir sidecar (ct + nombre original)
@@ -152,6 +177,7 @@ def execute_plan(plan: ProcessPlan, extensions: list[str]) -> dict:
     for item in plan.files:
         dst = target_dir / item.final_name
         if not dst.exists():
+            logger.warning("  destino faltante tras procesar: %s", dst)
             continue
         fsutil.set_creation_time_windows(dst, item.original_ct)
         meta: dict = {"original_ct": item.original_ct}
@@ -162,4 +188,7 @@ def execute_plan(plan: ProcessPlan, extensions: list[str]) -> dict:
         sidecar.set_many_full(mapping)
         logger.info("sidecar actualizado con %d entrada(s) (ct + nombre original)", len(mapping))
 
-    return {"moved": moved, "target_dir": str(target_dir), "files": len(plan.files)}
+    result = {"moved": moved, "target_dir": str(target_dir), "files": len(plan.files)}
+    logger.info("execute_plan: FIN %d movido(s), %d renombrado(s) en %.2fs",
+                moved, renamed_existing, time.monotonic() - t0)
+    return result

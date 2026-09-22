@@ -8,19 +8,23 @@ from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel
 from PyQt6.QtGui import QColor
 
 from app import fsutil
+from app import logs
+
+logger = logs.get_logger("models")
 
 COL_NOMBRE = 0
 COL_F_ORIGINAL = 1
 COL_F_ACTUAL = 2
 COL_TIPO = 3
 COL_TAMANO = 4
+COL_ORIGINAL = 5
 
 # CORREGIDO: Removida la última columna de la lista de cabeceras
-HEADERS = ["Nombre", "F. Original", "F. Actual", "Tipo", "Tamaño"]
+HEADERS = ["Nombre", "F. Original", "F. Actual", "Tipo", "Tamaño", "Original"]
 
 
 class FileTableModel(QAbstractTableModel):
-    """Modelo de archivos de un directorio con las 5 columnas de Explorer."""
+    """Modelo de archivos de un directorio (columnas Explorer + nombre original)."""
 
     def __init__(self, extensions: list[str],
                  sidecar_lookup=None,
@@ -37,12 +41,17 @@ class FileTableModel(QAbstractTableModel):
 
     # --- Datos ------------------------------------------------------------------
     def set_directory(self, directory: Optional[os.PathLike | str]) -> None:
+        import time as _time
+        start = _time.monotonic()
         self.beginResetModel()
         self.rows = []
         self._directory = Path(directory) if directory else None
         if self._directory and self._directory.is_dir():
             self.rows = [self._metadata(p) for p in fsutil.list_allowed_files(self._directory, self.extensions)]
         self.endResetModel()
+        logger.debug("modelo cargado: %s (%d archivo(s) en %.1fms)",
+                     self._directory, len(self.rows),
+                     (_time.monotonic() - start) * 1000)
 
     def _metadata(self, path: Path) -> dict:
         md = fsutil.file_metadata(path, self.extensions, sidecar_lookup=self.sidecar_lookup)
@@ -82,6 +91,11 @@ class FileTableModel(QAbstractTableModel):
             return lambda r: r["name"].lower()
         if column == COL_TIPO:
             return lambda r: r["ext"]
+        if column == COL_ORIGINAL:
+            name_of = self.sidecar_name_lookup
+            if name_of:
+                return lambda r: (name_of(r["name"]) or r["name"]).lower()
+            return lambda r: r["name"].lower()
         return lambda r: r["size"]
 
     # --- QAbstractTableModel ----------------------------------------------------
@@ -112,6 +126,10 @@ class FileTableModel(QAbstractTableModel):
                 return row["ext"].lstrip(".").upper()
             if col == COL_TAMANO:
                 return fsutil.human_size(row["size"])
+            if col == COL_ORIGINAL:
+                if self.sidecar_name_lookup:
+                    return self.sidecar_name_lookup(row["name"]) or ""
+                return ""
             return ""
             
         if role == Qt.ItemDataRole.ToolTipRole:
@@ -127,6 +145,9 @@ class FileTableModel(QAbstractTableModel):
             
         if role == Qt.ItemDataRole.ForegroundRole and col == COL_TIPO:
             return QColor("#4E5568")
+
+        if role == Qt.ItemDataRole.ForegroundRole and col == COL_ORIGINAL:
+            return QColor("#64748B")
             
         if role == Qt.ItemDataRole.TextAlignmentRole and col == COL_TAMANO:
             return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

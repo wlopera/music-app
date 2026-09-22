@@ -5,7 +5,10 @@ from pathlib import Path
 from PyQt6.QtWidgets import (QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
                              QLineEdit, QMessageBox, QPushButton, QVBoxLayout)
 
+from app import logs
 from app.config import ConfigManager
+
+logger = logs.get_logger("settings_dialog")
 
 
 def _browse(parent, edit: QLineEdit, dialog_cb) -> None:
@@ -93,13 +96,16 @@ class SettingsDialog(QDialog):
         exts = [e.strip() for e in self.ext_edit.text().split(",") if e.strip()]
 
         if base and not Path(base).is_dir():
+            logger.warning("config: carpeta base invalida %r", base)
             QMessageBox.warning(self, "Ruta inválida", "La carpeta base no existe.")
             return
         if exts and not all(e.lower().startswith(".") for e in exts):
+            logger.warning("config: extensiones sin punto %r", exts)
             QMessageBox.warning(self, "Extensiones",
                                 "Las extensiones deben llevar punto: .mp3, .wav, .mp4")
             return
 
+        logger.info("config: guardar base=%r temp=%r nav=%r ext=%r", base, temp, nav, exts)
         self.config.carpeta_base = base
         self.config.carpeta_temporal = temp
         self.config.raiz_navegacion = nav

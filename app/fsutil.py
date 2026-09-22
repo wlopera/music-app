@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Iterable, Optional
 import ctypes
 from ctypes import wintypes
+import time
+
+from app import logs
+
+logger = logs.get_logger("fsutil")
 
 
 def _windll() -> bool:
@@ -61,10 +66,13 @@ def safe_move(src: os.PathLike | str, dst: os.PathLike | str) -> None:
         return
     try:
         src.replace(dst)
-    except OSError:
+        logger.debug("move: %s -> %s", src, dst)
+    except OSError as exc:
+        logger.warning("move directo fallo (%s); degradando a copiar+borrar", exc)
         import shutil
         shutil.copy2(str(src), str(dst))
         src.unlink(missing_ok=True)
+        logger.debug("move (copia+borrar): %s -> %s", src, dst)
 
 
 def copy_file_responsive(src: os.PathLike | str, dst: os.PathLike | str,
@@ -77,6 +85,7 @@ def copy_file_responsive(src: os.PathLike | str, dst: os.PathLike | str,
     src = Path(src)
     dst = Path(dst)
     st = src.stat()
+    t0 = time.monotonic()
     import shutil
     try:
         with open(src, "rb") as fin, open(dst, "wb") as fout:
@@ -89,9 +98,12 @@ def copy_file_responsive(src: os.PathLike | str, dst: os.PathLike | str,
                     yield_cb()
         shutil.copystat(str(src), str(dst))
         os.chmod(dst, st.st_mode & 0o777)
-    except BaseException:
+    except BaseException as exc:
         dst.unlink(missing_ok=True)
+        logger.error("copia fallida %s -> %s: %s", src, dst, exc)
         raise
+    logger.debug("copia %s -> %s (%d bytes en %.2fs)",
+                 src, dst, st.st_size, time.monotonic() - t0)
 
 
 def is_allowed(path: os.PathLike | str, extensions: Iterable[str]) -> bool:
@@ -177,9 +189,12 @@ def set_creation_time_windows(path: os.PathLike | str, epoch_ts: float) -> bool:
         FILE_SHARE_READ | FILE_SHARE_WRITE, None,
         OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, None)
     if handle == wintypes.HANDLE(-1).value or not handle:
+        logger.debug("set_creation_time fallo: no se pudo abrir %s", path)
         return False
     try:
         ok = bool(kernel32.SetFileTime(handle, ctypes.byref(ft), None, None))
     finally:
         kernel32.CloseHandle(handle)
+    if not ok:
+        logger.warning("set_creation_time fallo (SetFileTime) en %s", path)
     return ok

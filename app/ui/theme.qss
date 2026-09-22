@@ -454,3 +454,13 @@ QStatusBar {
     font-size: 8.5pt;
     border-top: 1px solid #E2E8F0;
 }
+QToolButton#btnIconHeader {
+    background-color: #F1F5F9;
+    border: 1px solid #CBD5E1;
+    border-radius: 4px;
+    padding: 4px;
+}
+QToolButton#btnIconHeader:hover {
+    background-color: #E2E8F0;
+    border-color: #94A3B8;
+}
