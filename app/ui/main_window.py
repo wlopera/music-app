@@ -204,11 +204,20 @@ class MainWindow(QMainWindow):
         self.library_delete_btn.setToolTip("Eliminar las versiones seleccionadas de la Biblioteca")
         self.library_delete_btn.clicked.connect(self._on_library_delete_selected)
 
+        # Botón Renumerar (Biblioteca) - Reordena v1..vN de la carpeta base y ajusta
+        # el .musicapp.json (entrada por archivo vivo) SIN necesitar staging.
+        self.library_renumber_btn = QToolButton()
+        self.library_renumber_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
+        self.library_renumber_btn.setObjectName("btnIconHeader")
+        self.library_renumber_btn.setToolTip("Renumerar v1..vN (Biblioteca) y ajustar el .musicapp.json")
+        self.library_renumber_btn.clicked.connect(self._on_library_renumber)
+
         # Inyección ordenada en el extremo derecho del encabezado de la sección de Biblioteca
         if hasattr(self.library_panel, '_header') and self.library_panel._header.layout():
             lib_header_lay = self.library_panel._header.layout()
             lib_header_lay.addWidget(self.library_clear_btn)
             lib_header_lay.addWidget(self.library_delete_btn)
+            lib_header_lay.addWidget(self.library_renumber_btn)
         
         split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(self.folder_list)
@@ -327,6 +336,7 @@ class MainWindow(QMainWindow):
                     if path and path.is_file():
                         path.unlink()
                         logger.debug("  borrado %s", path)
+                self._auto_renumber_library()
                 self.detail.model.refresh()
                 self._show_song_folder(self.detail.model.directory)
                 self._set_status("Carpeta de la biblioteca vaciada con éxito.", 4000)
@@ -374,16 +384,75 @@ class MainWindow(QMainWindow):
                 logger.info("  biblioteca: borrado OK %s (%.1fms)", p,
                             (time.monotonic() - t) * 1000)
 
+            res = self._auto_renumber_library()
+
             logger.info("biblioteca: refrescando vista tras borrar")
             logs.note("biblioteca: refrescar despues de borrar")
             if self.detail.model.directory:
                 self._show_song_folder(self.detail.model.directory)
-            self._set_status(f"Se eliminaron {len(paths_to_delete)} archivo(s) correctamente.", 4000)
+            if res and res["renombrados"]:
+                self._set_status(
+                    f"Se eliminaron {len(paths_to_delete)} archivo(s) y se renumeró "
+                    f"la carpeta (v1 = más viejo → vN = más nuevo).", 5000)
+            else:
+                self._set_status(f"Se eliminaron {len(paths_to_delete)} archivo(s) correctamente.", 4000)
             logger.info("biblioteca: borrado completado (%d archivo(s), %.1fms)",
                         len(paths_to_delete), (time.monotonic() - t0) * 1000)
         except Exception as exc:
             logger.error("biblioteca: fallo al borrar: %s", exc, exc_info=True)
             QMessageBox.critical(self, "Error", f"No se pudo completar el borrado:\n{exc}")
+    def _on_library_renumber(self) -> None:
+        """Renumera la carpeta base seleccionada (v1..vN por fecha original) y ajusta
+        el `.musicapp.json`, limpiando las entradas de archivos ya borrados."""
+        if not self.detail.model.directory or not self.detail.model.directory.is_dir():
+            QMessageBox.information(self, "Sin carpeta",
+                                    "Selecciona una carpeta de canción de la Biblioteca primero.")
+            return
+
+        folder = self.detail.model.directory
+        logger.info("biblioteca: RENUMERAR carpeta %s (%d archivo(s))",
+                    folder, len(self.detail.model.rows))
+        ret = QMessageBox.question(
+            self, "Confirmar renumeración",
+            f"¿Renumerar las versiones v1..vN de «{folder.name}» por fecha original\n"
+            f"y ajustar el .musicapp.json? (Se omiten archivos ya borrados.)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if ret != QMessageBox.StandardButton.Yes:
+            logger.info("biblioteca: renumeracion cancelada por el usuario")
+            return
+
+        try:
+            from app import processing
+            result = processing.renumber_target_folder(folder, self.config.extensiones_permitidas)
+            logs.note("biblioteca: renumerar ejecutado")
+            if self.detail.model.directory:
+                self._show_song_folder(self.detail.model.directory)
+            self._set_status(
+                f"Renumeradas {result['total']} versión(es), {result['renombrados']} renombrada(s).",
+                5000)
+            logger.info("biblioteca: renumeracion OK: %s", result)
+        except Exception as exc:
+            logger.error("biblioteca: fallo al renumerar: %s", exc, exc_info=True)
+            QMessageBox.critical(self, "Error", f"No se pudo renumerar:\n{exc}")
+
+    def _auto_renumber_library(self):
+        """Tras borrar en la Biblioteca, renumera la carpeta base seleccionada
+        (v1..vN por fecha original, mas viejo -> mas nuevo) y ajusta el .musicapp.json."""
+        folder = self.detail.model.directory
+        if not folder or not folder.is_dir():
+            return None
+        try:
+            from app import processing
+            result = processing.renumber_target_folder(folder, self.config.extensiones_permitidas)
+            if result["renombrados"]:
+                logger.info("biblioteca: auto-renumeracion de %s (%d renombrado(s))",
+                            folder.name, result["renombrados"])
+            return result
+        except Exception as exc:
+            logger.error("biblioteca: auto-renumeracion fallo: %s", exc, exc_info=True)
+            return None
+
     def _open_media(self, path) -> None:
         from app.ui.media_modal import MediaModal
         t0 = time.monotonic()

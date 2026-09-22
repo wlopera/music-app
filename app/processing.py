@@ -25,6 +25,7 @@ class Entry:
     ext: str
     original_ct: float
     from_staging: bool
+    original_name: Optional[str] = None  # nombre original antes de cualquier renombrado
 
     @property
     def final_name(self) -> str:
@@ -40,6 +41,7 @@ class PlannedFile:
     source_path: Path
     from_staging: bool
     source_name: str = ""   # nombre original antes del renombrado
+    original_name: str = ""  # nombre original preservado de la carpeta base (si existe)
 
 
 @dataclass
@@ -58,12 +60,14 @@ def _entry(path: Path, extensions: list[str], sidecar: Optional[Sidecar]) -> Opt
     if not path.is_file() or not fsutil.is_allowed(path, extensions):
         return None
     original = fsutil.get_creation_time(path)
+    original_name: Optional[str] = None
     if sidecar is not None:
         saved = sidecar.get_original_ct(path.name)
         if saved:
             original = saved
+        original_name = sidecar.get_original_name(path.name)
     return Entry(path=path, name=path.name, ext=path.suffix.lower(),
-                 original_ct=original, from_staging=False)
+                 original_ct=original, from_staging=False, original_name=original_name)
 
 
 def collect_staging_entries(stag_dir: Path, extensions: list[str]) -> list[Entry]:
@@ -109,7 +113,8 @@ def build_plan(song_name: str, base_dir: Path, stag_dir: Path, extensions: list[
             plan.files.append(PlannedFile(
                 index=i, final_name=final, ext=e.ext, original_ct=e.original_ct,
                 source_path=e.path, from_staging=e.from_staging,
-                source_name=e.name))   # preservar el nombre antes del renombrado
+                source_name=e.name,          # nombre antes del renombrado
+                original_name=e.original_name or ""))  # nombre original preservado
         logger.info("build_plan '%s': plan de %d version(es), %d desde staging",
                     song_name, len(plan.files), plan.staging_count)
         return plan
@@ -181,8 +186,12 @@ def execute_plan(plan: ProcessPlan, extensions: list[str]) -> dict:
             continue
         fsutil.set_creation_time_windows(dst, item.original_ct)
         meta: dict = {"original_ct": item.original_ct}
-        if item.source_name and item.source_name != item.final_name:
-            meta["original_name"] = item.source_name
+        # Preservar el nombre original conocido: el de la carpeta base gana; los
+        # archivos nuevos del staging aportan su nombre de origen. Nunca se pisa con
+        # el nombre _vN actual.
+        orig = item.original_name or (item.source_name if item.from_staging else "")
+        if orig and orig != item.final_name:
+            meta["original_name"] = orig
         mapping[item.final_name] = meta
     if mapping:
         sidecar.set_many_full(mapping)
@@ -192,3 +201,64 @@ def execute_plan(plan: ProcessPlan, extensions: list[str]) -> dict:
     logger.info("execute_plan: FIN %d movido(s), %d renombrado(s) en %.2fs",
                 moved, renamed_existing, time.monotonic() - t0)
     return result
+
+
+def renumber_target_folder(target_dir: Path, extensions: list[str]) -> dict:
+    """Renumera SOLO la carpeta base (sin staging): reordena los archivos actuales a
+    `{carpeta}_v1..vN` por su fecha original y reescribe el `.musicapp.json` con las
+    entradas vivas (eliminando las de archivos ya borrados).
+
+    Devuelve {"renombrados": int, "total": int, "dir": str} para la barra de estado.
+    """
+    target_dir = Path(target_dir)
+    if not target_dir.is_dir():
+        raise FileNotFoundError(f"La carpeta base no existe: {target_dir}")
+
+    sidecar = Sidecar(target_dir)
+    entries = collect_target_entries(target_dir, extensions)
+    entries.sort(key=lambda e: (e.original_ct, e.name.lower()))
+    song_name = target_dir.name or "Cancion"
+
+    with logs.track(logger, f"renumerar '{song_name}'"):
+        logger.info("renumerar '%s': %d archivo(s) en %s",
+                    song_name, len(entries), target_dir)
+
+        renames: list[tuple[Path, str]] = []
+        for i, e in enumerate(entries, start=1):
+            renames.append((e.path, f"{song_name}_v{i}{e.ext}"))
+
+        # Fase 1: nombres a temporales unicos (mismo dir) para evitar colisiones
+        tmp_moves: list[tuple[Path, str]] = []
+        for src, final in renames:
+            if src.name == final:
+                continue
+            tmp = src.parent / f".__renum_{uuid.uuid4().hex}__{src.name}"
+            _rename_with_retry(src, tmp)
+            tmp_moves.append((tmp, final))
+
+        # Fase 2: nombres finales
+        renamed = 0
+        for tmp, final in tmp_moves:
+            _rename_with_retry(tmp, target_dir / final)
+            renamed += 1
+
+        # Fase 3: fechas originales + sidecar limpio (solo entradas vivas);
+        # cada archivo conserva su original_ct y su original_name al renombrar.
+        mapping: dict[str, dict] = {}
+        for e in entries:
+            final = f"{song_name}_v{entries.index(e) + 1}{e.ext}"
+            dst = target_dir / final
+            if not dst.is_file():
+                continue
+            fsutil.set_creation_time_windows(dst, e.original_ct)
+            meta: dict = {"original_ct": e.original_ct}
+            if e.original_name and e.original_name != final:
+                meta["original_name"] = e.original_name
+            mapping[final] = meta
+        sidecar.rebuild(mapping)
+        logger.info("renumerar '%s': %d renombrado(s), sidecar con %d entrada(s)",
+                    song_name, renamed, len(mapping))
+
+        result = {"renombrados": renamed, "total": len(entries), "dir": str(target_dir)}
+        logger.info("renumerar: FIN %s", result)
+        return result

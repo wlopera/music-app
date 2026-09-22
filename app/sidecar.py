@@ -131,6 +131,21 @@ class Sidecar:
         data.setdefault("files", {}).pop(filename, None)
         self.write(data)
 
+    def rebuild(self, mapping: dict[str, dict]) -> None:
+        """Sobrescribe el sidecar con SOLO las entradas vivas (limpia huerfanas).
+
+        mapping = {
+            "Cancion_v1.mp3": {"original_ct": 1234.0, "original_name": "raw.mp3"},
+            ...
+        }
+        """
+        files: dict[str, Any] = {}
+        for final_name, meta in mapping.items():
+            clean = {k: v for k, v in meta.items() if v is not None}
+            if clean:
+                files[final_name] = clean
+        self.write({"version": 2, "files": files})
+
     def clear_files(self) -> None:
         data = self.read()
         data["files"] = {}
