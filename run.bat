@@ -1,0 +1,1 @@
+cd C:\2026\Music-App> powershell -ExecutionPolicy Bypass -File build.ps1

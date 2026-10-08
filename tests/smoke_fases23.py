@@ -81,17 +81,18 @@ def test_ui_mainwindow():
         app.processEvents()
 
         # simular llenado y procesar (con una copia en staging)
-        win.name_edit.setText("MiTema")
+        view = win.agrupar
+        view.name_edit.setText("MiTema")
         src_dir = base / "origen"
         src_dir.mkdir()
         _touch(src_dir / "demo.mp3", 1_600_000_000.0)
-        win._copy_to_staging([src_dir / "demo.mp3"])
+        view._copy_to_staging([src_dir / "demo.mp3"])
         app.processEvents()
-        assert win.staging.count() == 1
-        assert win.process_btn.isEnabled(), "boton procesar deberia estar habilitado"
+        assert view.staging.count() == 1
+        assert view.process_btn.isEnabled(), "boton procesar deberia estar habilitado"
 
-        win._confirm_plan = lambda plan: True  # evitar modal bloqueante en offscreen
-        win._on_process()
+        view._confirm_plan = lambda plan: True  # evitar modal bloqueante en offscreen
+        view._on_process()
         app.processEvents()
         ok = (base / "MiTema" / "MiTema_v1.mp3").exists()
         assert ok, "no se genero la version final tras procesar"

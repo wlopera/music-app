@@ -62,15 +62,17 @@ def main() -> int:
 
     from app.ui.theme import apply_theme
 
-    apply_theme(app)
-
     # Config persistente portable: junto al .exe (o en la raiz del proyecto al correr
     # desde el codigo fuente). El build repone una plantilla con campos vacios si falta,
     # de modo que el usuario configure sus datos desde ⚙ Config.
     config = ConfigManager(root)
     log.info("config %s: carpeta_base=%r temporal=%r raiz_nav=%r", config.path,
              config.carpeta_base, config.carpeta_temporal, config.raiz_navegacion)
+    log.info("version %s | tema %s", config.version, config.tema)
 
+    apply_theme(app, "dark" if config.tema == "oscuro" else "light")
+
+    # La app arranca directamente en la vista Inicio (bienvenida en el panel derecho).
     window = MainWindow(config)
     window.show()
     log.info("ventana principal mostrada")
@@ -83,7 +85,11 @@ def main() -> int:
 
     code = app.exec()
     log.info("=== FIN Music-App (codigo %s) ===", code)
-    return code
+    # Salida forzada antes del teardown del intérprete: evita el access violation
+    # que produce PyQt6 + faulthandler al apagar el hilo watchdog (crash report
+    # "dejó de funcionar" al cerrar la app empaquetada). El logging escribe con
+    # flush por registro, así que no se pierde ninguna línea.
+    os._exit(code)
 
 
 if __name__ == "__main__":

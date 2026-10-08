@@ -70,7 +70,7 @@ def test_ui(tmp: Path) -> None:
     win = MainWindow(cfg)
     win.show()
     app.processEvents()
-    assert win.status_bar, "statusbar no creada"
+    assert win.footer, "pie (footer) no creado"
     win.close()
     print(f"OK ui (estilos {len(app.styleSheet())} chars)")
 

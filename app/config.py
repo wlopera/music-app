@@ -5,10 +5,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app import logs
+from app.version import normalize as _normalize_version
 
 logger = logs.get_logger("config")
 
 DEFAULT_CONFIG: dict[str, Any] = {
+    "version": "",
+    "tema": "claro",
     "carpeta_base": "",
     "carpeta_temporal": "",
     "extensiones_permitidas": [".mp3", ".wav", ".mp4", ".opus", ".mov", ".avi", ".mkv"],
@@ -33,6 +36,7 @@ class ConfigManager:
                 with self.path.open("r", encoding="utf-8") as fh:
                     raw = json.load(fh)
                 self.data = {**DEFAULT_CONFIG, **{k: v for k, v in raw.items() if k in DEFAULT_CONFIG}}
+                self.data["version"] = _normalize_version(self.data.get("version"))
                 logger.debug("config cargada de %s (%d clave(s))", self.path, len(self.data))
                 return
             except (json.JSONDecodeError, OSError) as exc:
@@ -40,14 +44,36 @@ class ConfigManager:
                 self.data = dict(DEFAULT_CONFIG)
         else:
             self.data = dict(DEFAULT_CONFIG)
-            self.save()
-            logger.info("config auto-generada en %s", self.path)
+        self.data["version"] = _normalize_version(self.data.get("version"))
+        self.save()
+        logger.info("config auto-generada en %s", self.path)
 
     def save(self) -> None:
         self.path.write_text(json.dumps(self.data, indent=4, ensure_ascii=False), encoding="utf-8")
         logger.debug("config guardada en %s: %s", self.path, {k: v for k, v in self.data.items()})
 
     # --- Propiedades esenciales -------------------------------------------------
+    @property
+    def version(self) -> str:
+        """Version `1.ddmmyy-nro` vigente (normalizada; auto-correcta si esta corrupta)."""
+        return _normalize_version(self.data.get("version"))
+
+    @version.setter
+    def version(self, value: str) -> None:
+        self.data["version"] = _normalize_version(value)
+        self.save()
+
+    @property
+    def tema(self) -> str:
+        """'claro' | 'oscuro' (cualquier otro valor cae a 'claro')."""
+        v = str(self.data.get("tema", "claro")).strip().lower()
+        return "oscuro" if v.startswith("osc") or v == "dark" else "claro"
+
+    @tema.setter
+    def tema(self, value: str) -> None:
+        self.data["tema"] = "oscuro" if str(value).lower().startswith(("osc", "dark")) else "claro"
+        self.save()
+
     @property
     def carpeta_base(self) -> Optional[str]:
         v = self.data.get("carpeta_base", "")
