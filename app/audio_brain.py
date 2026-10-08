@@ -35,9 +35,11 @@ from app.sidecar import Sidecar
 
 logger = logs.get_logger("audio_brain")
 
-# Extensiones analizables por librosa/libsndfile en el MVP. Los vídeos (.mp4,
-# .mov, .mkv...) se listan como ignorados: necesitarían extracción ffmpeg.
-AUDIO_EXTENSIONS: frozenset[str] = frozenset({".mp3", ".wav", ".opus"})
+# Extensiones de audio analizables por librosa/libsndfile (sin ffmpeg). Los
+# formatos de vídeo y los que contienen MPEG-4 (.mp4, .mov, .mkv, .m4a, .aac…)
+# no se pueden decodificar y se listan como ignorados.
+AUDIO_EXTENSIONS: frozenset[str] = frozenset(
+    {".mp3", ".wav", ".opus", ".flac", ".ogg", ".aiff", ".aif"})
 
 # Umbral de tempo para chroma CQT.
 _SAMPLE_RATE = 22050
@@ -120,10 +122,11 @@ def availability() -> tuple[bool, str]:
         }
         importlib.import_module("soundfile")  # decodificación wav/mp3/opus
         return True, ""
-    except ImportError as exc:
+    except Exception as exc:  # noqa: BLE001 - degradar ante cualquier fallo nativo
         _LIBS_ERROR = (
-            "Motor de audio no disponible: faltan dependencias "
-            f"({exc}). Instala con: pip install -r requirements-audio.txt"
+            "Motor de audio no disponible "
+            f"({type(exc).__name__}: {exc}). "
+            "Instala las dependencias con: pip install -r requirements-audio.txt"
         )
         logger.warning("%s", _LIBS_ERROR)
         return False, _LIBS_ERROR
@@ -239,42 +242,58 @@ def _passes_gates(a: AudioProfile, b: AudioProfile) -> bool:
     return True
 
 
-def build_plan(analysis: Analysis, theta: float, prefix: str = "carpeta_") -> SearchPlan:
-    """Agrupa por enlace único con umbral de coseno `theta` y numera `carpeta_N`."""
+def build_plan(analysis: Analysis, theta: float = 0.985, prefix: str = "carpeta_") -> SearchPlan:
+    """Agrupa por enlace completo (todas las parejas del grupo deben superar `theta`).
+
+    Evita el efecto cadena ('single-linkage chaining'): dos canciones solo
+    comparten carpeta si son mutuamente similares y pasan las puertas.
+    """
     valid = [p for p in analysis.profiles if p.error is None and p.vector]
     n = len(valid)
 
-    # Componentes conexos: i~j si sim >= theta y pasan las puertas.
-    parent = list(range(n))
+    # Agrupación aglomerativa por enlace completo:
+    # Cada archivo inicia en su propio clúster.
+    clusters: list[list[int]] = [[i] for i in range(n)]
 
-    def find(x: int) -> int:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
+    while True:
+        best_pair = None
+        best_sim = -1.0
+        for i in range(len(clusters)):
+            for j in range(i + 1, len(clusters)):
+                min_sim = 1.0
+                possible = True
+                for u in clusters[i]:
+                    for v in clusters[j]:
+                        a, b = valid[u], valid[v]
+                        if not _passes_gates(a, b):
+                            possible = False
+                            break
+                        sim = _cosine(a, b)
+                        if sim < theta:
+                            possible = False
+                            break
+                        if sim < min_sim:
+                            min_sim = sim
+                    if not possible:
+                        break
+                if possible and min_sim > best_sim:
+                    best_sim = min_sim
+                    best_pair = (i, j)
+        if best_pair is None:
+            break
+        i, j = best_pair
+        clusters[i] = clusters[i] + clusters[j]
+        clusters.pop(j)
 
-    edges = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            a, b = valid[i], valid[j]
-            if not _passes_gates(a, b):
-                continue
-            if _cosine(a, b) >= theta:
-                parent[find(i)] = find(j)
-                edges += 1
-    logger.info("plan: %d archivo(s), %d pareja(s) sobre umbral %.3f", n, edges, theta)
-
-    comps: dict[int, list[AudioProfile]] = {}
-    for i, p in enumerate(valid):
-        comps.setdefault(find(i), []).append(p)
-    grouped = [c for c in comps.values() if len(c) >= 2]
-    grouped.sort(key=lambda c: (-len(c), min(p.name.lower() for p in c)))
+    grouped_indices = [c for c in clusters if len(c) >= 2]
+    grouped_indices.sort(key=lambda c: (-len(c), min(valid[idx].name.lower() for idx in c)))
 
     existing = {d.name for d in analysis.root_dir.iterdir()
                 if d.is_dir() and d.name.startswith(prefix)}
     plans: list[GroupDraft] = []
     k = 1
-    for comp in grouped:
+    for comp_idxs in grouped_indices:
+        comp = [valid[idx] for idx in comp_idxs]
         while f"{prefix}{k}" in existing:
             k += 1
         folder = f"{prefix}{k}"
@@ -286,13 +305,14 @@ def build_plan(analysis: Analysis, theta: float, prefix: str = "carpeta_") -> Se
             for j in range(i + 1, m):
                 mean_sim += _cosine(comp[i], comp[j])
                 pairs += 1
-        mean_sim = mean_sim / pairs if pairs else 0.0
+        mean_sim = mean_sim / pairs if pairs else 1.0
         plans.append(GroupDraft(folder_name=folder, files=sorted(comp, key=lambda p: p.name.lower()),
                                 mean_sim=mean_sim))
         k += 1
 
+    logger.info("plan: %d archivo(s), %d grupo(s) sobre umbral %.3f", n, len(plans), theta)
     return SearchPlan(root_dir=analysis.root_dir, groups=plans, threshold=theta,
-                      singles=n - sum(len(c) for c in grouped),
+                      singles=n - sum(len(c) for c in grouped_indices),
                       errors=list(analysis.errors), ignored=list(analysis.ignored))
 
 

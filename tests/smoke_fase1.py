@@ -12,7 +12,7 @@ def test_config(tmp: Path) -> None:
     from app.config import ConfigManager
     cfg = ConfigManager(tmp)
     assert cfg.path.is_file(), "config.json no auto-generado"
-    assert cfg.extensiones_permitidas == [".mp3", ".wav", ".mp4", ".opus"]
+    assert cfg.extensiones_permitidas == [".mp3", ".wav", ".opus", ".flac", ".ogg", ".aiff", ".aif"]
     base = tmp / "base"
     base.mkdir()
     cfg.carpeta_base = str(base)

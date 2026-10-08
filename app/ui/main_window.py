@@ -15,12 +15,13 @@ from app.config import ConfigManager
 from app.ui import theme
 from app.ui.footer import WindowFooter
 from app.ui.header import WindowHeader
+from app.ui.log_panel import LogPanel
 from app.ui.sidebar import Sidebar
 from app.ui.views import AgruparView, SearchView, WelcomeView
 
 logger = logs.get_logger("main_window")
 
-_VIEWS: tuple[str, ...] = ("Inicio", "Agrupar Temas", "Buscar Canción")
+_VIEWS: tuple[str, ...] = ("Inicio", "Agrupar Temas", "Buscar Canciones")
 
 
 class MainWindow(QMainWindow):
@@ -64,6 +65,10 @@ class MainWindow(QMainWindow):
         body_lay.addWidget(self.stack, 1)
 
         root.addWidget(body, 1)
+
+        # --- Panel de Registros y Trazas (colapsable) ----------------------
+        self.log_panel = LogPanel()
+        root.addWidget(self.log_panel)
 
         # --- Pie -----------------------------------------------------------
         self.footer = WindowFooter()

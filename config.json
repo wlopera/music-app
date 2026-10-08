@@ -1,16 +1,16 @@
 {
-    "version": "1.081026-4",
-    "tema": "claro",
+    "version": "1.081026-5",
+    "tema": "oscuro",
     "carpeta_base": "",
     "carpeta_temporal": "",
     "extensiones_permitidas": [
         ".mp3",
         ".wav",
-        ".mp4",
         ".opus",
-        ".mov",
-        ".avi",
-        ".mkv"
+        ".flac",
+        ".ogg",
+        ".aiff",
+        ".aif"
     ],
     "raiz_navegacion": ""
 }

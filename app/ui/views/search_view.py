@@ -1,4 +1,4 @@
-"""Vista «Buscar Canción»: motor de detección de canciones similares (fase 2).
+"""Vista «Buscar Canciones»: motor de detección de canciones similares (fase 2).
 
 Flujo plan-then-execute (mismo espíritu que Agrupar Temas):
   1. La carpeta a analizar (universo) se analiza con `SearchAnalyzer` en un hilo de
@@ -26,8 +26,8 @@ from app.ui.search_worker import SearchAnalyzer
 
 logger = logs.get_logger("search_view")
 
-_THETA_MIN = 0.88   # Amplio
-_THETA_MAX = 0.97   # Preciso
+_THETA_MIN = 0.975   # Flexible (variaciones de ritmo / tempo)
+_THETA_MAX = 0.995   # Estricto (duplicados exactos)
 _MAX_GROUPS_SHOWN = 50
 
 
@@ -46,6 +46,7 @@ class SearchView(QWidget):
         self.config = config
         self.last_status = ""
         self._plan = None
+        self._last_analysis = None
         self._busy = False
         self._engine_ok, self._engine_why = audio_brain.availability()
         # Analiza en un hilo de fondo (threading plano) y entrega señales al hilo
@@ -95,6 +96,7 @@ class SearchView(QWidget):
         path_row.addWidget(path_label)
         self.path_edit = QLineEdit()
         self.path_edit.setPlaceholderText("Carpeta con las canciones a revisar…")
+        self.path_edit.textChanged.connect(self._on_path_changed)
         path_row.addWidget(self.path_edit, 1)
         self.browse_btn = QToolButton()
         self.browse_btn.setText("…")
@@ -103,17 +105,17 @@ class SearchView(QWidget):
         path_row.addWidget(self.browse_btn)
         cfg_lay.addLayout(path_row)
 
-        # Sensibilidad
+        # Sensibilidad (calibrada entre 97.5% y 99.5%, default 98.5%)
         sens_row = QHBoxLayout()
         sens_row.addWidget(QLabel("Sensibilidad:"))
-        sens_row.addWidget(QLabel("Amplio"))
+        sens_row.addWidget(QLabel("Flexible"))
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(0, 100)
-        self.slider.setValue(60)
+        self.slider.setValue(50)
         self.slider.setMinimumWidth(220)
         self.slider.valueChanged.connect(self._on_slider)
         sens_row.addWidget(self.slider, 1)
-        sens_row.addWidget(QLabel("Preciso"))
+        sens_row.addWidget(QLabel("Estricto"))
         self.theta_label = QLabel("")
         self.theta_label.setObjectName("mutedLabel")
         sens_row.addWidget(self.theta_label)
@@ -155,6 +157,22 @@ class SearchView(QWidget):
         res_title.setObjectName("sectionHeaderTitle")
         res_head.addWidget(res_title)
         res_head.addStretch(1)
+
+        self.copy_btn = QPushButton("📋 Copiar")
+        self.copy_btn.setObjectName("logActionBtn")
+        self.copy_btn.setToolTip("Copiar coincidencias detectadas al portapapeles")
+        self.copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.copy_btn.setEnabled(False)
+        self.copy_btn.clicked.connect(self._copy_results)
+        res_head.addWidget(self.copy_btn)
+
+        self.clear_btn = QPushButton("🗑 Limpiar")
+        self.clear_btn.setObjectName("logActionBtn")
+        self.clear_btn.setToolTip("Limpiar resultados")
+        self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_btn.clicked.connect(self._clear_all)
+        res_head.addWidget(self.clear_btn)
+
         self.resume_label = QLabel("")
         self.resume_label.setObjectName("mutedLabel")
         res_head.addWidget(self.resume_label)
@@ -195,10 +213,76 @@ class SearchView(QWidget):
     # --- Sensibilidad ---------------------------------------------------------
     def _theta(self) -> float:
         v = self.slider.value() / 100.0
-        return round(_THETA_MIN + v * (_THETA_MAX - _THETA_MIN), 3)
+        return round(_THETA_MIN + v * (_THETA_MAX - _THETA_MIN), 4)
 
     def _on_slider(self, value: int) -> None:
-        self.theta_label.setText(f"similitud ≥ {self._theta():.0%}")
+        th = self._theta()
+        tag = ""
+        if th >= 0.990:
+            tag = "· Estricto"
+        elif 0.982 <= th <= 0.988:
+            tag = "· Recomendado"
+        elif th <= 0.978:
+            tag = "· Flexible"
+        self.theta_label.setText(f"similitud ≥ {th:.1%} {tag}")
+
+        # Recálculo al vuelo si ya se analizaron los audios
+        if self._last_analysis is not None and not self._busy:
+            try:
+                self._plan = audio_brain.build_plan(self._last_analysis, th)
+                self._render_results(self._last_analysis)
+                self.exec_btn.setEnabled(len(self._plan.groups) > 0)
+                self.copy_btn.setEnabled(len(self._plan.groups) > 0)
+                n = len(self._plan.groups)
+                self._set_status(f"{n} grupo(s) y {self._plan.singles} única(s) a {th:.1%}", 3000)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("error recalculando plan al mover slider: %s", exc)
+
+    def _on_path_changed(self) -> None:
+        """Si el usuario cambia la ruta, limpia automáticamente los resultados anteriores."""
+        self._last_analysis = None
+        self._plan = None
+        self.exec_btn.setEnabled(False)
+        self.copy_btn.setEnabled(False)
+        self._render_placeholder()
+
+    def _clear_all(self) -> None:
+        """Limpia la vista previa y los resultados en memoria."""
+        self._last_analysis = None
+        self._plan = None
+        self.progress.setVisible(False)
+        self.exec_btn.setEnabled(False)
+        self.copy_btn.setEnabled(False)
+        self._render_placeholder()
+        self._set_status("Resultados limpiados.", 3000)
+
+    def _copy_results(self) -> None:
+        """Copia el resumen de coincidencias al portapapeles."""
+        plan = self._plan
+        if plan is None or not plan.groups:
+            self._set_status("No hay grupos para copiar.", 2500)
+            return
+        lines = [
+            f"Music-App · Grupos detectados en: {plan.root_dir.name}",
+            f"Umbral de similitud: {plan.threshold:.1%}",
+            f"Total grupos: {len(plan.groups)} · Archivos a agrupar: {plan.files_to_move}",
+            "",
+        ]
+        for g in plan.groups:
+            lines.append(f"📁 {g.folder_name} ({len(g.files)} archivos · {g.mean_sim:.1%} similitud):")
+            for f in g.files:
+                lines.append(f"   · {f.name} ({_fmt_dur(f.duration)})")
+            lines.append("")
+        if plan.singles:
+            lines.append(f"ℹ️ {plan.singles} canciones únicas permanecen en la carpeta raíz.")
+        if plan.errors:
+            lines.append(f"⚠️ {len(plan.errors)} archivo(s) no se pudieron analizar.")
+
+        text = "\n".join(lines)
+        clipboard = QApplication.clipboard()
+        if clipboard:
+            clipboard.setText(text)
+            self._set_status("✓ Resultados copiados al portapapeles.", 3000)
 
     # --- Selección de carpeta -------------------------------------------------
     def _browse(self) -> None:
@@ -222,10 +306,13 @@ class SearchView(QWidget):
         if self._busy:
             return
 
+        # Limpiar resultados anteriores antes de arrancar
         self._busy = True
+        self._last_analysis = None
         self._plan = None
         self.analyze_btn.setEnabled(False)
         self.exec_btn.setEnabled(False)
+        self.copy_btn.setEnabled(False)
         self.progress.setRange(0, 0)
         self.progress.setValue(0)
         self.progress.setVisible(True)
@@ -245,6 +332,7 @@ class SearchView(QWidget):
 
     def _on_analyzed(self, analysis) -> None:
         self._busy = False
+        self._last_analysis = analysis
         self.analyze_btn.setEnabled(self._engine_ok)
         try:
             self._plan = audio_brain.build_plan(analysis, self._theta())
@@ -253,7 +341,9 @@ class SearchView(QWidget):
             return
         self.progress.setValue(self.progress.maximum())
         self._render_results(analysis)
-        self.exec_btn.setEnabled(len(self._plan.groups) > 0)
+        has_groups = len(self._plan.groups) > 0
+        self.exec_btn.setEnabled(has_groups)
+        self.copy_btn.setEnabled(has_groups)
         n = len(self._plan.groups)
         msg = f"{n} grupo(s) y {self._plan.singles} canción(es) única(s) detectado(s)."
         self._set_status(msg, 5000)
@@ -290,12 +380,16 @@ class SearchView(QWidget):
         self._clear_results()
         plan = self._plan
         if plan is None or not plan.groups:
-            ph = QLabel("No se detectaron grupos con más de un archivo. "
-                        "Prueba a mover el control de sensibilidad hacia «Amplio».")
+            if plan and plan.errors and len(plan.errors) == analysis.audio_count:
+                ph = QLabel(
+                    f"⚠️ No se pudo analizar ningún archivo ({len(plan.errors)} con error).\n"
+                    "Revisa los detalles abajo o el archivo de log.")
+            else:
+                ph = QLabel("No se detectaron grupos con más de un archivo. "
+                            "Prueba a mover el control de sensibilidad hacia «Flexible».")
             ph.setObjectName("mutedLabel")
             ph.setWordWrap(True)
             self.results_lay.addWidget(ph)
-            self.results_lay.addStretch(1)
         else:
             for g in plan.groups[: _MAX_GROUPS_SHOWN]:
                 card = QFrame()
@@ -317,7 +411,28 @@ class SearchView(QWidget):
                 more = QLabel(f"+ {len(plan.groups) - _MAX_GROUPS_SHOWN} grupo(s) más…")
                 more.setObjectName("mutedLabel")
                 self.results_lay.addWidget(more)
-            self.results_lay.addStretch(1)
+
+        if plan and plan.errors:
+            err_card = QFrame()
+            err_card.setObjectName("card")
+            err_lay = QVBoxLayout(err_card)
+            err_lay.setContentsMargins(10, 8, 10, 8)
+            err_lay.setSpacing(4)
+            err_head = QLabel(f"⚠️ Archivos sin analizar ({len(plan.errors)})")
+            err_head.setObjectName("sectionHeaderTitle")
+            err_lay.addWidget(err_head)
+            for fname, reason in plan.errors[:8]:
+                row = QLabel(f"· {fname} ({reason})")
+                row.setObjectName("mutedLabel")
+                row.setWordWrap(True)
+                err_lay.addWidget(row)
+            if len(plan.errors) > 8:
+                more_err = QLabel(f"+ {len(plan.errors) - 8} archivo(s) más con error…")
+                more_err.setObjectName("mutedLabel")
+                err_lay.addWidget(more_err)
+            self.results_lay.addWidget(err_card)
+
+        self.results_lay.addStretch(1)
 
         bits = []
         bits.append(f"{analysis.audio_count} audio(s) revisados")
@@ -339,7 +454,8 @@ class SearchView(QWidget):
         resp = QMessageBox.question(
             self, "Confirmar agrupación",
             f"Se crearán {len(plan.groups)} carpeta(s) y se moverán "
-            f"{plan.files_to_move} archivo(s).\n\n" + solo_vista,
+            f"{plan.files_to_move} archivo(s) coincidentes.\n\n"
+            f"Las {plan.singles} canciones únicas permanecerán intactas en su sitio.\n\n" + solo_vista,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No)
         if resp != QMessageBox.StandardButton.Yes:

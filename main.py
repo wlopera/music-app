@@ -16,6 +16,38 @@ def app_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+def _audio_selftest(log) -> int:
+    """Autotest headless del motor de audio (MUSICAPP_SELFTEST_AUDIO=1).
+
+    Genera dos WAV identicos, corre el analisis real (librosa) y reporta. Sirve
+    para verificar el .exe empaquetado sin interfaz.
+    """
+    import tempfile
+
+    import numpy as np
+    import soundfile as sf
+
+    from app import audio_brain
+
+    ok, why = audio_brain.availability()
+    log.info("selftest audio: availability=%s %r", ok, why)
+    if not ok:
+        print(f"SELFTEST AUDIO: FAIL ({why})", flush=True)
+        return 2
+    folder = Path(tempfile.mkdtemp(prefix="selftest_audio"))
+    sr = 22050
+    t = np.arange(sr * 4) / sr
+    y = (0.3 * np.sin(2 * np.pi * 440 * t)).astype("float32")
+    sf.write(str(folder / "a.wav"), y, sr)
+    sf.write(str(folder / "b.wav"), y, sr)
+    analysis = audio_brain.analyze_folder(folder, [".wav"])
+    profiles = len(analysis.profiles)
+    result = "PASS" if profiles == 2 and not analysis.errors else "FAIL"
+    log.info("selftest audio: perfiles=%d errores=%d -> %s", profiles, len(analysis.errors), result)
+    print(f"SELFTEST AUDIO: {result} perfiles={profiles}", flush=True)
+    return 0 if result == "PASS" else 3
+
+
 def main() -> int:
     from PyQt6.QtCore import QTimer
     from PyQt6.QtGui import QFont
@@ -41,6 +73,9 @@ def main() -> int:
     log.info("raiz de la app: %s | empaquetado: %s", root, bool(getattr(sys, "frozen", False)))
     log.info("log: %s", log_path)
     log.info("python: %s", sys.version)
+
+    if os.environ.get("MUSICAPP_SELFTEST_AUDIO"):
+        return _audio_selftest(log)
 
     app = QApplication(sys.argv)
     app.setApplicationName("Music-App")

@@ -610,3 +610,63 @@ QPushButton#navItem:checked {
     font-size: 9.5pt;
     padding: 4px 0;
 }
+
+/* --- Panel de Logs / Registros ---------------------------------------- */
+#logPanel {
+    background-color: #F8FAFC;
+}
+#logHeader {
+    background-color: #F1F5F9;
+    border-top: 1px solid #E2E8F0;
+    border-bottom: 1px solid #E2E8F0;
+}
+#logToggleBtn {
+    color: #2563EB;
+    font-size: 8.5pt;
+    font-weight: 600;
+    background: transparent;
+    border: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+#logToggleBtn:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+    color: #1D4ED8;
+}
+#logActionBtn {
+    background-color: #FFFFFF;
+    color: #475569;
+    font-size: 8pt;
+    font-weight: 500;
+    border: 1px solid #CBD5E1;
+    border-radius: 4px;
+    padding: 1px 8px;
+    min-height: 18px;
+}
+#logActionBtn:hover {
+    background-color: #E2E8F0;
+    color: #0F172A;
+    border-color: #94A3B8;
+}
+#logViewer {
+    background-color: #FFFFFF;
+    color: #1E293B;
+    border: none;
+    font-family: "Consolas", "Cascadia Code", monospace;
+    font-size: 8.5pt;
+    padding: 4px 8px;
+    selection-background-color: #BFDBFE;
+}
+#logViewer QScrollBar:vertical {
+    background: #F8FAFC;
+    width: 7px;
+}
+#logViewer QScrollBar::handle:vertical {
+    background: #CBD5E1;
+    border-radius: 3px;
+    min-height: 20px;
+}
+#logViewer QScrollBar::handle:vertical:hover {
+    background: #94A3B8;
+}
+

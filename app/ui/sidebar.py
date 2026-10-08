@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QButtonGroup, QHBoxLayout, QLabel, QPushButton, QVBo
 _ITEMS: tuple[tuple[str, str], ...] = (
     ("🏠", "Inicio"),
     ("🎵", "Agrupar Temas"),
-    ("🔍", "Buscar Canción"),
+    ("🔍", "Buscar Canciones"),
 )
 
 

@@ -1,4 +1,3 @@
-cat << 'EOF' > .gitignore
 # ============================================================
 # Gitignore optimizado para tu Music-App en Python
 # ============================================================
@@ -14,6 +13,7 @@ ENV_DIR/
 build/
 dist/
 *.spec
+!build.spec
 
 # 3. Archivos de Registro, Logs e Historial de ejecución
 *.log
@@ -51,4 +51,3 @@ __pycache__/
 Thumbs.db
 Desktop.ini
 .DS_Store
-EOF

@@ -105,10 +105,17 @@ al construir la fase.
   beat) o media global si no se detectan beats, con *gates* de duración y
   onsets/beat. Invariante al tempo (una misma melodía a 90/120/150 BPM se agrupa:
   similitud media ≈ 0.977).
-* **Agrupación:** `build_plan()` — unión de componentes por enlace único con umbral
-  coseno θ (0.88 Amplio … 0.97 Preciso). Los grupos se numeran `carpeta_1,
-  carpeta_2, …` **in-situ** dentro de la carpeta analizada, evitando colisiones.
-  Las canciones únicas se quedan donde están.
+* **Agrupación:** `build_plan()` — algoritmo aglomerativo por **enlace completo
+  (complete linkage)** con umbral coseno θ (0.975 Flexible … 0.985 Recomendado … 0.995 Estricto).
+  Exige que todas las parejas del grupo superen θ, eliminando el efecto cadena
+  (single-linkage chaining) donde temas con escalas similares se mezclaban masivamente.
+  Los grupos se numeran `carpeta_1, carpeta_2, …` **in-situ** dentro de la carpeta
+  analizada. Las canciones únicas permanecen en la raíz sin moverse.
+* **UI y Reactividad:** `app/ui/views/search_view.py`. Incorpora:
+  - Botón «Copiar» para exportar el resumen de coincidencias al portapapeles.
+  - Botón «Limpiar» y auto-limpieza ante cambios de ruta o inicio de análisis.
+  - Recálculo matemático al vuelo al mover el slider si los audios ya fueron analizados
+    (sin tener que volver a decodificar con librosa).
 * **Ejecución:** `execute_group_plan()` reutiliza el patrón transaccional de dos
   fases (temp-rename) + `fsutil.safe_move` + `Sidecar.rebuild`, preservando
   `original_ct` / `original_name`.
@@ -120,10 +127,18 @@ al construir la fase.
   GUI. Entrega progreso y mantiene la UI fluida.
 
 ### Decisiones
-* **Vídeo solo-audio en el MVP:** `.mp4/.mov/.avi/.mkv` se **ignoran** con aviso
-  (no hay ffmpeg integrado). Extensiones activas: `.mp3`, `.wav`, `.opus`.
-* **Dependencias separadas:** el núcleo queda en `requirements.txt` (solo `PyQt6`),
-  y el motor de audio es opcional en `requirements-audio.txt` (`librosa`).
+* **Solo audio:** se descartan los vídeos. Extensiones válidas de la app:
+  `.mp3, .wav, .opus, .flac, .ogg, .aiff, .aif` (todas decodificables por
+  libsndfile). Formatos con MPEG‑4 (`.mp4/.mov/.mkv/.m4a/.aac`) y `.wma` no se
+  pueden decodificar sin ffmpeg y quedan fuera.
+* **Motor empaquetado:** el `.exe` incluye `librosa` + `soundfile` (vía
+  `hiddenimports` en `build.spec`, con los hooks de `pyinstaller-hooks-contrib`),
+  de modo que «Buscar Canciones» funciona en el ejecutable. El núcleo sigue sin
+  librerías de audio en `requirements.txt`; el motor vive en
+  `requirements-audio.txt`.
+* **Degradación segura:** si el motor no se puede importar (incluido un fallo
+  nativo de DLL), `availability()` captura cualquier excepción, deja la vista
+  deshabilitada con aviso y la app nunca se cae por ello.
 
 ### Lecciones (crashes investigados)
 * **PyQt6 aborta el proceso** (`0xC0000409`) si una excepción escapa de un slot.
@@ -132,3 +147,12 @@ al construir la fase.
   accedan a atributos privados.
 * Se descartó la hipótesis de "librosa + hilos = crash": tanto `threading.Thread`
   como el bucle de eventos son seguros; el `QThread` nunca fue el problema.
+* **Módulo `email` en PyInstaller:** En Python 3.12, `soundfile` e `importlib.metadata`
+  importan internamente `email.message`. Si `"email"` está en los `EXCLUDES` de `build.spec`,
+  la decodificación de audios falla en tiempo de ejecución con `No module named 'email'`,
+  provocando que el 100% de los archivos queden en estado "sin analizar". Se retiró
+  `email` de los excludes y se incorporó a `AUDIO_HIDDEN_IMPORTS`.
+* **Transparencia en la UI ante fallos de análisis:** `search_view.py` ahora desglosa
+  una tarjeta de alerta con los motivos de error (`plan.errors`) y no sugiere de manera
+  engañosa mover el slider de sensibilidad cuando la causa es un fallo de procesamiento
+  o formato.

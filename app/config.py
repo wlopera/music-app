@@ -11,10 +11,10 @@ logger = logs.get_logger("config")
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": "",
-    "tema": "claro",
+    "tema": "oscuro",
     "carpeta_base": "",
     "carpeta_temporal": "",
-    "extensiones_permitidas": [".mp3", ".wav", ".mp4", ".opus", ".mov", ".avi", ".mkv"],
+    "extensiones_permitidas": [".mp3", ".wav", ".opus", ".flac", ".ogg", ".aiff", ".aif"],
     "raiz_navegacion": "",
 }
 
@@ -65,8 +65,8 @@ class ConfigManager:
 
     @property
     def tema(self) -> str:
-        """'claro' | 'oscuro' (cualquier otro valor cae a 'claro')."""
-        v = str(self.data.get("tema", "claro")).strip().lower()
+        """'claro' | 'oscuro' (por defecto 'oscuro'; otros valores caen a 'claro')."""
+        v = str(self.data.get("tema", "oscuro")).strip().lower()
         return "oscuro" if v.startswith("osc") or v == "dark" else "claro"
 
     @tema.setter
