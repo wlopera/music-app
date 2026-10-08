@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):
         self.stack.setObjectName("viewStack")
         self.welcome_view = WelcomeView(config)
         self.agrupar = AgruparView(config)
-        self.search_view = SearchView()
+        self.search_view = SearchView(config)
         self.stack.addWidget(self.welcome_view)   # índice 0: vista por defecto
         self.stack.addWidget(self.agrupar)        # índice 1
         self.stack.addWidget(self.search_view)    # índice 2
@@ -80,6 +80,7 @@ class MainWindow(QMainWindow):
         self.header.maximizeRequested.connect(self._toggle_maximize)
         self.header.closeRequested.connect(self.close)
         self.agrupar.statusMessage.connect(self._set_status)
+        self.search_view.statusMessage.connect(self._set_status)
 
         self.last_status = ""
         self.header.sync_theme_btn(theme.current_mode())

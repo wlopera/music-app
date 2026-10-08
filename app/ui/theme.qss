@@ -155,6 +155,20 @@ QPushButton#btnPrimary:disabled {
     border-color: #E2E8F0;
     color: #94A3B8;
 }
+QPushButton#btnSecondary {
+    background-color: transparent;
+    color: #2563EB;
+    border: 1px solid #2563EB;
+}
+QPushButton#btnSecondary:hover {
+    background-color: #2563EB;
+    color: #FFFFFF;
+}
+QPushButton#btnSecondary:disabled {
+    background-color: transparent;
+    border-color: #CBD5E1;
+    color: #94A3B8;
+}
 
 QPushButton#btnOutline {
     background-color: #FFFFFF;

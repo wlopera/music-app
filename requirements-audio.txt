@@ -1,0 +1,5 @@
+# Motor opcional "Buscar Canciones" (librosa + soundfile/libsndfile).
+# OPCIONAL: si no está instalado, la app degrada con un aviso y sigue funcionando.
+# Instalación:
+#   .venv\Scripts\python.exe -m pip install -r requirements-audio.txt
+librosa>=1.0.0

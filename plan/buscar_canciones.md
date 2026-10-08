@@ -90,3 +90,45 @@ El análisis debe ejecutarse en un hilo secundario para evitar que la UI de PyQt
 3. **Seguridad del FS:** Ningún archivo debe ser eliminado o sobrescrito durante el proceso de reubicación; si hay colisiones de nombres dentro de un mismo grupo, 
 renombrar agregando un sufijo numérico (ej. `aaa_2.mp3`).
 
+---
+
+## Estado de implementación (v1.081026-4)
+
+**Implementado y verificado.** Esta sección registra las decisiones finales tomadas
+al construir la fase.
+
+### Arquitectura final
+* **Dominio:** `app/audio_brain.py`. Lazy-import de `librosa` (opcional) con
+  degradación elegante: si falta, `availability()` devuelve `(False, motivo)` y la
+  vista se deshabilita con un aviso, sin romper la app.
+* **Huella:** `extract_profile()` usa chroma CQT sincronizado a beats (mediana por
+  beat) o media global si no se detectan beats, con *gates* de duración y
+  onsets/beat. Invariante al tempo (una misma melodía a 90/120/150 BPM se agrupa:
+  similitud media ≈ 0.977).
+* **Agrupación:** `build_plan()` — unión de componentes por enlace único con umbral
+  coseno θ (0.88 Amplio … 0.97 Preciso). Los grupos se numeran `carpeta_1,
+  carpeta_2, …` **in-situ** dentro de la carpeta analizada, evitando colisiones.
+  Las canciones únicas se quedan donde están.
+* **Ejecución:** `execute_group_plan()` reutiliza el patrón transaccional de dos
+  fases (temp-rename) + `fsutil.safe_move` + `Sidecar.rebuild`, preservando
+  `original_ct` / `original_name`.
+* **UI:** `app/ui/views/search_view.py` (NO `app/ui/pages/search_page.py`, ruta
+  descartada en el refactor de navegación). Está embebida como página "Buscar" del
+  `QStackedWidget` de `app/ui/main_window.py`.
+* **Worker:** `app/ui/search_worker.py` — `SearchAnalyzer`, que corre el análisis en
+  un `threading.Thread` **plano** (no `QThread`) y emite señales queued hacia el hilo
+  GUI. Entrega progreso y mantiene la UI fluida.
+
+### Decisiones
+* **Vídeo solo-audio en el MVP:** `.mp4/.mov/.avi/.mkv` se **ignoran** con aviso
+  (no hay ffmpeg integrado). Extensiones activas: `.mp3`, `.wav`, `.opus`.
+* **Dependencias separadas:** el núcleo queda en `requirements.txt` (solo `PyQt6`),
+  y el motor de audio es opcional en `requirements-audio.txt` (`librosa`).
+
+### Lecciones (crashes investigados)
+* **PyQt6 aborta el proceso** (`0xC0000409`) si una excepción escapa de un slot.
+  Varios "crashes fantasma" durante el desarrollo eran scripts de diagnóstico que
+  referenciaban `view._thread` (ya inexistente). No mezclar refactors con tests que
+  accedan a atributos privados.
+* Se descartó la hipótesis de "librosa + hilos = crash": tanto `threading.Thread`
+  como el bucle de eventos son seguros; el `QThread` nunca fue el problema.
