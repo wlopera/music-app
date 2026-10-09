@@ -55,3 +55,46 @@ def theme_icon(mode: str, size: int = 18) -> QIcon:
     if mode == "dark":
         return sun_icon(size, "#FBBF24")
     return moon_icon(size, "#2563EB")
+
+
+def music_note_icon(mode: str = "dark", size: int = 18) -> QIcon:
+    """Nota musical 🎵 vectorial adaptativa al tema (celeste en oscuro, pizarra en claro)."""
+    from PyQt6.QtGui import QPainterPath
+    color = "#60A5FA" if mode == "dark" else "#1E293B"
+    pm, p = _pixmap(size)
+    c = QColor(color)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(c)
+
+    # 1. Cabeza ovalada inclinada de la nota
+    p.save()
+    p.translate(size * 0.35, size * 0.72)
+    p.rotate(-22)
+    p.drawEllipse(QPointF(0, 0), size * 0.22, size * 0.16)
+    p.restore()
+
+    # 2. Plica vertical (tallo)
+    pen = QPen(c)
+    pen.setWidthF(max(1.8, size * 0.10))
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    stem_x = size * 0.52
+    stem_top = size * 0.18
+    stem_bottom = size * 0.70
+    p.drawLine(QPointF(stem_x, stem_bottom), QPointF(stem_x, stem_top))
+
+    # 3. Corchete curvado (bandera de la nota)
+    path = QPainterPath()
+    path.moveTo(stem_x, stem_top)
+    path.cubicTo(
+        QPointF(size * 0.85, stem_top + size * 0.14),
+        QPointF(size * 0.78, stem_top + size * 0.38),
+        QPointF(stem_x + 1, stem_top + size * 0.46)
+    )
+    pen.setWidthF(max(1.6, size * 0.09))
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPath(path)
+
+    p.end()
+    return QIcon(pm)

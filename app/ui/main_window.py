@@ -88,7 +88,9 @@ class MainWindow(QMainWindow):
         self.search_view.statusMessage.connect(self._set_status)
 
         self.last_status = ""
-        self.header.sync_theme_btn(theme.current_mode())
+        current_mode = theme.current_mode()
+        self.header.sync_theme_btn(current_mode)
+        self.sidebar.sync_theme(current_mode)
         # Estado inicial: el último mensaje de la vista (p.ej. falta de carpeta
         # base) o "Listo"
         self._set_status(self.agrupar.last_status or "Listo", 5000)
@@ -110,6 +112,7 @@ class MainWindow(QMainWindow):
         mode = theme.toggle_theme(QApplication.instance())
         self.config.tema = mode  # persiste la elección en config.json
         self.header.sync_theme_btn(mode)
+        self.sidebar.sync_theme(mode)
         logger.info("tema cambiado a %s", mode)
         self._set_status("Tema oscuro activado." if mode == "dark" else "Tema claro activado.", 3000)
 

@@ -1,7 +1,9 @@
 """Menú lateral (sidebar) de navegación entre vistas del QStackedWidget."""
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import QButtonGroup, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+
+from app.ui import icons
 
 _ITEMS: tuple[tuple[str, str], ...] = (
     ("🏠", "Inicio"),
@@ -36,32 +38,17 @@ class Sidebar(QWidget):
 
         self._buttons: list[QPushButton] = []
         for index, (emoji, text) in enumerate(_ITEMS):
-            btn = QPushButton()
+            if text == "Agrupar Temas":
+                btn = QPushButton(f"  {text}")
+                btn.setIcon(icons.music_note_icon("dark", 18))
+                btn.setIconSize(QSize(18, 18))
+            else:
+                btn = QPushButton(f"{emoji}   {text}")
             btn.setCheckable(True)
             btn.setObjectName("navItem")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(text)
             btn.clicked.connect(lambda _=False, i=index: self.navigated.emit(i))
-
-            btn_lay = QHBoxLayout(btn)
-            btn_lay.setContentsMargins(12, 8, 12, 8)
-            btn_lay.setSpacing(10)
-
-            icon_lbl = QLabel(emoji)
-            icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-            if emoji == "🎵":
-                icon_lbl.setObjectName("navIconMusic")
-            else:
-                icon_lbl.setObjectName("navIcon")
-
-            text_lbl = QLabel(text)
-            text_lbl.setObjectName("navItemText")
-            text_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-            btn_lay.addWidget(icon_lbl)
-            btn_lay.addWidget(text_lbl)
-            btn_lay.addStretch(1)
-
             self._group.addButton(btn, index)
             self._buttons.append(btn)
             lay.addWidget(btn)
@@ -75,3 +62,8 @@ class Sidebar(QWidget):
         btn = self._group.button(index)
         if btn and not btn.isChecked():
             btn.setChecked(True)
+
+    def sync_theme(self, mode: str) -> None:
+        """Actualiza el icono dinámico de la nota musical según el tema."""
+        if len(self._buttons) > 1:
+            self._buttons[1].setIcon(icons.music_note_icon(mode, 18))
