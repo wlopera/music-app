@@ -23,6 +23,7 @@ Cómo funciona (resumen del plan `plan/buscar_canciones.md`):
 from __future__ import annotations
 
 import importlib
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -193,23 +194,56 @@ def scan_folder(folder: Path, extensions: Optional[list[str]] = None) -> tuple[l
 
 def analyze_folder(folder: Path, extensions: Optional[list[str]] = None,
                    progress_cb: Optional[Callable[[int, int, str], None]] = None) -> Analysis:
-    """Escanea `folder` y extrae la huella de cada archivo de audio (síncrono)."""
+    """Escanea `folder` y extrae la huella de cada archivo de audio en paralelo."""
     ok, why = availability()
     if not ok:
         raise RuntimeError(why)
     audio_paths, ignored = scan_folder(folder, extensions)
+    total = len(audio_paths)
+    if total == 0:
+        return Analysis(root_dir=Path(folder), profiles=[], ignored=ignored, errors=[])
+
+    # Hilos paralelos (óptimo 4 para evitar contención de memoria o sobrecarga)
+    workers = min(4, os.cpu_count() or 1)
     profiles: list[AudioProfile] = []
     errors: list[tuple[str, str]] = []
-    total = len(audio_paths)
-    with logs.track(logger, f"analizar '{Path(folder).name}' ({total} audio, {len(ignored)} ignorados)"):
-        for i, p in enumerate(audio_paths, start=1):
-            if progress_cb is not None:
-                progress_cb(i, total, p.name)
-            prof = extract_profile(p)
-            if prof.error:
-                errors.append((p.name, prof.error))
-            else:
-                profiles.append(prof)
+
+    with logs.track(logger, f"analizar '{Path(folder).name}' ({total} audio, {len(ignored)} ignorados, {workers} hilos)"):
+        if total == 1 or workers <= 1:
+            for i, p in enumerate(audio_paths, start=1):
+                if progress_cb is not None:
+                    progress_cb(i, total, p.name)
+                prof = extract_profile(p)
+                if prof.error:
+                    errors.append((p.name, prof.error))
+                else:
+                    profiles.append(prof)
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            done_count = 0
+            results: list[Optional[AudioProfile]] = [None] * total
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                future_to_idx = {executor.submit(extract_profile, p): (idx, p)
+                                 for idx, p in enumerate(audio_paths)}
+                for future in as_completed(future_to_idx):
+                    idx, path = future_to_idx[future]
+                    try:
+                        prof = future.result()
+                    except Exception as exc:
+                        prof = AudioProfile(path=path, name=path.name, error=str(exc))
+                    results[idx] = prof
+                    done_count += 1
+                    if progress_cb is not None:
+                        progress_cb(done_count, total, path.name)
+
+            for prof in results:
+                if prof is not None:
+                    if prof.error:
+                        errors.append((prof.name, prof.error))
+                    else:
+                        profiles.append(prof)
+
         logger.info("analizar: %d perfil(es) OK, %d con error, %d ignorado(s)",
                     len(profiles), len(errors), len(ignored))
     return Analysis(root_dir=Path(folder), profiles=profiles, ignored=ignored, errors=errors)
@@ -221,12 +255,18 @@ def _vector(a: AudioProfile) -> "object":
 
 
 def _cosine(a: AudioProfile, b: AudioProfile) -> float:
+    """Similitud del coseno máxima con invarianza de tonalidad (rotación de los 12 semitonos)."""
     np = _np()
     va, vb = _vector(a), _vector(b)
     denom = float(np.linalg.norm(va) * np.linalg.norm(vb))
     if denom <= 1e-12:
         return 0.0
-    return float(np.dot(va, vb) / denom)
+    best_sim = float(np.dot(va, vb) / denom)
+    for shift in range(1, 12):
+        sim = float(np.dot(va, np.roll(vb, shift)) / denom)
+        if sim > best_sim:
+            best_sim = sim
+    return best_sim
 
 
 def _passes_gates(a: AudioProfile, b: AudioProfile) -> bool:

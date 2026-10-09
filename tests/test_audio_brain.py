@@ -100,6 +100,25 @@ def test_plan() -> None:
         assert entry.get("original_ct", 0) > 0
 
 
+def test_pitch_invariance() -> None:
+    from app import audio_brain
+    import soundfile as sf
+    with tempfile.TemporaryDirectory(prefix="pitch_") as d:
+        folder = Path(d)
+        p_orig = folder / "tema_original.wav"
+        p_trans = folder / "tema_transpuesto_3st.wav"
+        # Renderiza melodia A original y melodia A transportada 3 semitonos
+        sf.write(str(p_orig), _render(MEL_A, 120), SR, subtype="PCM_16")
+        mel_trans = [(note + 3) % 12 for note in MEL_A]
+        sf.write(str(p_trans), _render(mel_trans, 120), SR, subtype="PCM_16")
+
+        prof1 = audio_brain.extract_profile(p_orig)
+        prof2 = audio_brain.extract_profile(p_trans)
+        assert prof1.error is None and prof2.error is None
+        sim = audio_brain._cosine(prof1, prof2)
+        assert sim > 0.98, f"Esperado > 0.98 con invarianza de tonalidad, obtenido: {sim}"
+
+
 def main() -> int:
     from app import audio_brain
     ok, why = audio_brain.availability()
@@ -107,7 +126,8 @@ def main() -> int:
         print(f"SKIP audio_brain: {why}")
         return 0
     test_plan()
-    print("OK audio_brain (tempo-invariante, corruptos, videos y ejecución en disco)")
+    test_pitch_invariance()
+    print("OK audio_brain (tempo-invariante, pitch-invariante, corruptos, videos y disco)")
     return 0
 
 

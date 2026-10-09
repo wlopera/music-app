@@ -26,8 +26,8 @@ from app.ui.search_worker import SearchAnalyzer
 
 logger = logs.get_logger("search_view")
 
-_THETA_MIN = 0.975   # Flexible (variaciones de ritmo / tempo)
-_THETA_MAX = 0.995   # Estricto (duplicados exactos)
+_THETA_MIN = 0.970   # Flexible (variaciones de ritmo / tempo)
+_THETA_MAX = 0.990   # Estricto (demos, tomas y duplicados)
 _MAX_GROUPS_SHOWN = 50
 _MAX_FILES_LIMIT = 100
 _MAX_FILE_SIZE_MB = 150
@@ -259,17 +259,21 @@ class SearchView(QWidget):
 
     # --- Sensibilidad ---------------------------------------------------------
     def _theta(self) -> float:
-        v = self.slider.value() / 100.0
-        return round(_THETA_MIN + v * (_THETA_MAX - _THETA_MIN), 4)
+        v = self.slider.value()
+        if v <= 50:
+            th = 0.970 + (v / 50.0) * (0.985 - 0.970)
+        else:
+            th = 0.985 + ((v - 50.0) / 50.0) * (0.990 - 0.985)
+        return round(th, 4)
 
     def _on_slider(self, value: int) -> None:
         th = self._theta()
         tag = ""
-        if th >= 0.990:
+        if th >= 0.988:
             tag = "· Estricto"
-        elif 0.982 <= th <= 0.988:
+        elif 0.980 <= th < 0.988:
             tag = "· Recomendado"
-        elif th <= 0.978:
+        else:
             tag = "· Flexible"
         self.theta_label.setText(f"similitud ≥ {th:.1%} {tag}")
 
@@ -323,13 +327,13 @@ class SearchView(QWidget):
             return False, "La carpeta no contiene archivos de audio admitidos."
 
         if len(audios) > _MAX_FILES_LIMIT:
-            msg = (f"⚠️ Límite excedido: La carpeta contiene {len(audios)} canciones "
-                   f"(máximo {_MAX_FILES_LIMIT} permitidas por lote). Reduce el lote para continuar.")
+            est_min = max(1, round(len(audios) * 0.35 / 60))
+            msg = (f"⚠️ Lote grande: {len(audios)} canciones detectadas. "
+                   f"El análisis multinúcleo tardará aprox. ~{est_min} min.")
             self.limits_label.setText(msg)
-            self.limits_label.setStyleSheet("color: #F87171; font-weight: bold; font-size: 8.5pt;")
-            self.analyze_btn.setEnabled(False)
-            self._set_status(msg, 5000)
-            return False, msg
+            self.limits_label.setStyleSheet("color: #FBBF24; font-size: 8.5pt;")
+            self.analyze_btn.setEnabled(self._engine_ok)
+            return True, msg
 
         for a in audios:
             try:
@@ -346,7 +350,7 @@ class SearchView(QWidget):
             except Exception:
                 pass
 
-        msg = f"✓ {len(audios)} archivo(s) de audio detectados dentro de los límites de seguridad."
+        msg = f"✓ {len(audios)} archivo(s) de audio detectados (rendimiento óptimo)."
         self.limits_label.setText(msg)
         self.limits_label.setStyleSheet("color: #10B981; font-size: 8.5pt;")
         self.analyze_btn.setEnabled(self._engine_ok)
@@ -415,6 +419,24 @@ class SearchView(QWidget):
         ok, why = self._validate_limits()
         if not ok:
             return
+
+        try:
+            audios, _ = audio_brain.scan_folder(Path(ruta), self.config.extensiones_permitidas)
+            if len(audios) > _MAX_FILES_LIMIT:
+                est_min = max(1, round(len(audios) * 0.35 / 60))
+                reply = QMessageBox.question(
+                    self,
+                    "Confirmar análisis de lote grande",
+                    f"Se han detectado {len(audios)} canciones en la carpeta.\n\n"
+                    f"El análisis acústico multinúcleo tardará aproximadamente {est_min} minuto(s).\n\n"
+                    "¿Deseas iniciar el análisis?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+        except Exception:
+            pass
 
         # Limpiar resultados anteriores antes de arrancar
         self._busy = True
