@@ -156,3 +156,42 @@ al construir la fase.
   una tarjeta de alerta con los motivos de error (`plan.errors`) y no sugiere de manera
   engañosa mover el slider de sensibilidad cuando la causa es un fallo de procesamiento
   o formato.
+
+---
+
+## 6. Especificaciones de Extensión: Music-App v2.0 (Criterio por Letra y Audición Interactiva)
+
+> **Principio de Diseño:** Extensión puramente aditiva y no destructiva. El motor de similitud acústica actual (enlace completo al 98.5%), la auto-limpieza, el panel de logs y el movimiento transaccional de archivos se mantienen intactos como la base sólida de producción.
+
+### A. Límites de Seguridad y Protección del Sistema
+* **Tope de canciones por análisis:** Máximo **100 archivos de audio** por lote.
+* **Tope de tamaño por archivo:** Máximo **150 MB** por archivo individual.
+* **Comportamiento en UI:**
+  - Se visualiza una nota informativa en el panel de análisis:
+    `ℹ️ Límite de seguridad: Hasta 100 canciones por lote · Máximo 150 MB por archivo.`
+  - Si una carpeta excede 100 audios o contiene algún archivo > 150 MB, el sistema emite una advertencia visual destacada y deshabilita el botón «ANALIZAR» hasta que la selección cumpla los límites, protegiendo la memoria RAM y el procesador de bloqueos.
+
+### B. Criterio Adicional por Letra Nativa (Criterio C)
+* **Extracción Ligera y Local:**
+  1. Lectura del tag de letra embebido en el archivo (`USLT` en MP3, `LYRICS` / `UNSYNCEDLYRICS` en Vorbis/FLAC/Opus).
+  2. Fallback local: Si el tag no existe, busca si hay un archivo de texto acompañante con el mismo nombre en la carpeta (`cancion.txt` o `cancion.lrc`).
+  3. No requiere transcripción por IA ni dependencias pesadas; lectura instantánea (< 1 ms).
+* **Normalización y Comparación:**
+  - Sin traducción: comparación estricta en el idioma nativo de la composición.
+  - Normalización: minúsculas, eliminación de signos de puntuación y filtrado de palabras vacías (*stopwords*).
+  - Umbral de coincidencia: **$\ge 80\%$** de similitud léxica.
+* **Degradación Elegante:**
+  - Si las canciones no tienen letra (o son instrumentales), el Criterio C simplemente no interviene y el sistema agrupa al 100% por similitud acústica al 98.5%.
+  - Si dos canciones comparten letra con coincidencia $\ge 80\%$, se agrupan automáticamente incluso si la instrumentación o tempo varían sustancialmente.
+
+### C. Resultados Interactivos y Audición en Línea
+* **Líneas interactivas en la lista de resultados:**
+  Tanto en las carpetas agrupadas como en la sección de canciones únicas, cada fila de canción cuenta con:
+  - **Botón `▶` (Play):** Abre de forma síncrona el reproductor cinematográfico `MediaModal` para audicionar el track antes de mover archivos.
+  - **Doble Clic:** Hacer doble clic en cualquier fila reproduce la canción inmediatamente.
+  - **Botón `📝` (Letra):** Abre un diálogo modal minimalista (`LyricsModal`):
+    - Si tiene letra: Muestra el texto original con barra de scroll.
+    - Si no tiene letra: Muestra el mensaje: *«Canción sin letra registrada en metadatos (ID3) ni archivo .txt/.lrc acompañante»*.
+* **Aislamiento de Canciones Únicas:**
+  - Las canciones únicas se listan claramente en una sección dedicada inferior para permitir su escucha.
+  - **No se mueven ni se tocan en disco** al presionar «EJECUTAR GRUPOS»; permanecen en su ubicación original en la raíz de la carpeta.

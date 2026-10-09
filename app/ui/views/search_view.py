@@ -29,11 +29,63 @@ logger = logs.get_logger("search_view")
 _THETA_MIN = 0.975   # Flexible (variaciones de ritmo / tempo)
 _THETA_MAX = 0.995   # Estricto (duplicados exactos)
 _MAX_GROUPS_SHOWN = 50
+_MAX_FILES_LIMIT = 100
+_MAX_FILE_SIZE_MB = 150
+_MAX_FILE_SIZE_BYTES = 150 * 1024 * 1024
 
 
 def _fmt_dur(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     return f"{m}:{s:02d}"
+
+
+class _SongRowWidget(QFrame):
+    """Fila interactiva de canción con audición directa, visor de letra y doble clic."""
+
+    def __init__(self, profile: audio_brain.AudioProfile, parent=None):
+        super().__init__(parent)
+        self.profile = profile
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Doble clic para reproducir canción")
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(6, 2, 6, 2)
+        lay.setSpacing(6)
+
+        lbl = QLabel(f"🎵  {profile.name}  ({_fmt_dur(profile.duration)})")
+        lbl.setObjectName("mutedLabel")
+        lay.addWidget(lbl, 1)
+
+        # Botón Letra
+        self.lyrics_btn = QPushButton("📝 Letra")
+        self.lyrics_btn.setObjectName("logActionBtn")
+        self.lyrics_btn.setToolTip("Ver letra nativa o registrar archivo")
+        self.lyrics_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.lyrics_btn.clicked.connect(self._open_lyrics)
+        lay.addWidget(self.lyrics_btn)
+
+        # Botón Play
+        self.play_btn = QPushButton("▶")
+        self.play_btn.setObjectName("logActionBtn")
+        self.play_btn.setToolTip("Reproducir canción")
+        self.play_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.play_btn.clicked.connect(self._play_song)
+        lay.addWidget(self.play_btn)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._play_song()
+        super().mouseDoubleClickEvent(event)
+
+    def _play_song(self) -> None:
+        from app.ui.media_modal import MediaModal
+        modal = MediaModal(self.profile.path, self.window())
+        modal.show()
+
+    def _open_lyrics(self) -> None:
+        from app.ui.lyrics_modal import LyricsModal
+        dlg = LyricsModal(self.profile.name, self.profile.lyrics, self.window())
+        dlg.exec()
 
 
 class SearchView(QWidget):
@@ -104,6 +156,13 @@ class SearchView(QWidget):
         self.browse_btn.clicked.connect(self._browse)
         path_row.addWidget(self.browse_btn)
         cfg_lay.addLayout(path_row)
+
+        # Límite de seguridad visible
+        self.limits_label = QLabel(
+            "ℹ️ Límite de seguridad: Hasta 100 canciones por lote · Máximo 150 MB por archivo.")
+        self.limits_label.setObjectName("welcomeHint")
+        self.limits_label.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
+        cfg_lay.addWidget(self.limits_label)
 
         # Sensibilidad (calibrada entre 97.5% y 99.5%, default 98.5%)
         sens_row = QHBoxLayout()
@@ -204,6 +263,7 @@ class SearchView(QWidget):
         self._render_placeholder()
         if self.config.carpeta_base:
             self.path_edit.setText(self.config.carpeta_base)
+        self._validate_limits()
 
     # --- Configuración --------------------------------------------------------
     def apply_config(self) -> None:
@@ -239,12 +299,71 @@ class SearchView(QWidget):
                 logger.error("error recalculando plan al mover slider: %s", exc)
 
     def _on_path_changed(self) -> None:
-        """Si el usuario cambia la ruta, limpia automáticamente los resultados anteriores."""
+        """Si el usuario cambia la ruta, limpia automáticamente los resultados y valida límites."""
         self._last_analysis = None
         self._plan = None
         self.exec_btn.setEnabled(False)
         self.copy_btn.setEnabled(False)
         self._render_placeholder()
+        self._validate_limits()
+
+    def _validate_limits(self) -> tuple[bool, str]:
+        """Comprueba límites de seguridad: máx 100 archivos y 150 MB por archivo."""
+        ruta = self.path_edit.text().strip()
+        if not ruta:
+            self.limits_label.setText(
+                "ℹ️ Límite de seguridad: Hasta 100 canciones por lote · Máximo 150 MB por archivo.")
+            self.limits_label.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
+            self.analyze_btn.setEnabled(self._engine_ok)
+            return True, ""
+
+        p = Path(ruta)
+        if not p.is_dir():
+            self.limits_label.setText(
+                "ℹ️ Límite de seguridad: Hasta 100 canciones por lote · Máximo 150 MB por archivo.")
+            self.limits_label.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
+            return False, f"La carpeta no existe: {p}"
+
+        try:
+            audios, _ = audio_brain.scan_folder(p, self.config.extensiones_permitidas)
+        except Exception as exc:
+            return False, str(exc)
+
+        if len(audios) == 0:
+            self.limits_label.setText("ℹ️ Sin archivos de audio admitidos en la carpeta.")
+            self.limits_label.setStyleSheet("color: #94A3B8; font-size: 8.5pt;")
+            self.analyze_btn.setEnabled(False)
+            return False, "La carpeta no contiene archivos de audio admitidos."
+
+        if len(audios) > _MAX_FILES_LIMIT:
+            msg = (f"⚠️ Límite excedido: La carpeta contiene {len(audios)} canciones "
+                   f"(máximo {_MAX_FILES_LIMIT} permitidas por lote). Reduce el lote para continuar.")
+            self.limits_label.setText(msg)
+            self.limits_label.setStyleSheet("color: #F87171; font-weight: bold; font-size: 8.5pt;")
+            self.analyze_btn.setEnabled(False)
+            self._set_status(msg, 5000)
+            return False, msg
+
+        for a in audios:
+            try:
+                sz = a.stat().st_size
+                if sz > _MAX_FILE_SIZE_BYTES:
+                    mb = sz / (1024 * 1024)
+                    msg = (f"⚠️ Archivo demasiado grande: '{a.name}' pesa {mb:.1f} MB "
+                           f"(máximo {_MAX_FILE_SIZE_MB} MB permitidos).")
+                    self.limits_label.setText(msg)
+                    self.limits_label.setStyleSheet("color: #F87171; font-weight: bold; font-size: 8.5pt;")
+                    self.analyze_btn.setEnabled(False)
+                    self._set_status(msg, 5000)
+                    return False, msg
+            except Exception:
+                pass
+
+        msg = f"✓ {len(audios)} archivo(s) de audio detectados dentro de los límites de seguridad."
+        self.limits_label.setText(msg)
+        self.limits_label.setStyleSheet("color: #10B981; font-size: 8.5pt;")
+        self.analyze_btn.setEnabled(self._engine_ok)
+        return True, ""
 
     def _clear_all(self) -> None:
         """Limpia la vista previa y los resultados en memoria."""
@@ -304,6 +423,10 @@ class SearchView(QWidget):
             self._set_status(self._engine_why, 6000)
             return
         if self._busy:
+            return
+
+        ok, why = self._validate_limits()
+        if not ok:
             return
 
         # Limpiar resultados anteriores antes de arrancar
@@ -399,18 +522,39 @@ class SearchView(QWidget):
                 card_lay.setSpacing(4)
                 head = QLabel(
                     f"📁 {g.folder_name} · {len(g.files)} archivos · "
-                    f"similitud media {g.mean_sim:.0%}")
+                    f"similitud media {g.mean_sim:.1%}")
                 head.setObjectName("sectionHeaderTitle")
                 card_lay.addWidget(head)
                 for f in g.files:
-                    row = QLabel(f"·  {f.name}  ({_fmt_dur(f.duration)})")
-                    row.setObjectName("mutedLabel")
-                    card_lay.addWidget(row)
+                    card_lay.addWidget(_SongRowWidget(f, self))
                 self.results_lay.addWidget(card)
             if len(plan.groups) > _MAX_GROUPS_SHOWN:
                 more = QLabel(f"+ {len(plan.groups) - _MAX_GROUPS_SHOWN} grupo(s) más…")
                 more.setObjectName("mutedLabel")
                 self.results_lay.addWidget(more)
+
+        # Sección de canciones únicas (se quedan en su sitio y se pueden escuchar)
+        if plan and plan.singles_profiles:
+            singles_card = QFrame()
+            singles_card.setObjectName("card")
+            singles_lay = QVBoxLayout(singles_card)
+            singles_lay.setContentsMargins(10, 8, 10, 8)
+            singles_lay.setSpacing(4)
+            head_s = QLabel(
+                f"🎵 Canciones Únicas ({len(plan.singles_profiles)} archivos · Permanecen en la raíz)")
+            head_s.setObjectName("sectionHeaderTitle")
+            singles_lay.addWidget(head_s)
+            sub_s = QLabel("Estas canciones no tienen duplicados y no se moverán al ejecutar.")
+            sub_s.setObjectName("mutedLabel")
+            sub_s.setStyleSheet("font-size: 8.5pt; color: #94A3B8; margin-bottom: 2px;")
+            singles_lay.addWidget(sub_s)
+            for f in plan.singles_profiles[:_MAX_GROUPS_SHOWN]:
+                singles_lay.addWidget(_SongRowWidget(f, self))
+            if len(plan.singles_profiles) > _MAX_GROUPS_SHOWN:
+                more_s = QLabel(f"+ {len(plan.singles_profiles) - _MAX_GROUPS_SHOWN} única(s) más…")
+                more_s.setObjectName("mutedLabel")
+                singles_lay.addWidget(more_s)
+            self.results_lay.addWidget(singles_card)
 
         if plan and plan.errors:
             err_card = QFrame()

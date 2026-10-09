@@ -64,6 +64,7 @@ class AudioProfile:
     onsets_per_beat: Optional[float] = None
     beats: int = 0
     error: Optional[str] = None
+    lyrics: Optional[str] = None
 
 
 @dataclass
@@ -97,6 +98,7 @@ class SearchPlan:
     groups: list[GroupDraft] = field(default_factory=list)
     threshold: float = 0.90
     singles: int = 0                 # archivos sin pareja (se quedan en su sitio)
+    singles_profiles: list[AudioProfile] = field(default_factory=list)
     errors: list[tuple[str, str]] = field(default_factory=list)
     ignored: list[Path] = field(default_factory=list)
 
@@ -164,11 +166,14 @@ def extract_profile(path: Path) -> AudioProfile:
             return AudioProfile(path=path, name=path.name, duration=duration,
                                 error="sin contenido espectral aprovechable")
         onsets = librosa.onset.onset_detect(y=y, sr=sr)
+        from app.lyrics import read_lyrics
+        lyr = read_lyrics(path)
         return AudioProfile(
             path=path, name=path.name, duration=duration,
             vector=(vec / norm).tolist(),
             onsets_per_beat=float(len(onsets)) / n_beats if n_beats >= 2 else None,
             beats=n_beats,
+            lyrics=lyr,
         )
     except Exception as exc:  # archivo corrupto / formato no soportado
         logger.warning("no se pudo analizar %s: %s", path.name, exc)
@@ -269,6 +274,12 @@ def build_plan(analysis: Analysis, theta: float = 0.985, prefix: str = "carpeta_
                             possible = False
                             break
                         sim = _cosine(a, b)
+                        # Criterio C (Letra): si ambas tienen letra y coincide >= 80%, refuerza la unión
+                        if a.lyrics and b.lyrics:
+                            from app.lyrics import lyrics_similarity
+                            lyr_sim = lyrics_similarity(a.lyrics, b.lyrics)
+                            if lyr_sim >= 0.80:
+                                sim = max(sim, lyr_sim)
                         if sim < theta:
                             possible = False
                             break
@@ -310,9 +321,13 @@ def build_plan(analysis: Analysis, theta: float = 0.985, prefix: str = "carpeta_
                                 mean_sim=mean_sim))
         k += 1
 
+    grouped_set = {idx for c in grouped_indices for idx in c}
+    singles_profs = [valid[i] for i in range(n) if i not in grouped_set]
+
     logger.info("plan: %d archivo(s), %d grupo(s) sobre umbral %.3f", n, len(plans), theta)
     return SearchPlan(root_dir=analysis.root_dir, groups=plans, threshold=theta,
-                      singles=n - sum(len(c) for c in grouped_indices),
+                      singles=len(singles_profs),
+                      singles_profiles=singles_profs,
                       errors=list(analysis.errors), ignored=list(analysis.ignored))
 
 
