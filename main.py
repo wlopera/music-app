@@ -16,6 +16,69 @@ def app_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+def user_data_dir() -> Path:
+    """Directorio de datos del usuario para config.json y musicapp.log.
+
+    Estrategia de modo dual (Portable vs Instalado):
+    1. Si existe un archivo marcador 'portable' o 'portable.dat' junto al .exe,
+       se respeta el modo portable junto al ejecutable.
+    2. Si la app esta instalada en carpetas del sistema (Program Files, etc.) o
+       si la carpeta del ejecutable NO tiene permisos de escritura, se redirige
+       a %APPDATA%\\Music-App.
+    3. En desarrollo (no frozen) o ejecutable portable en carpeta con permisos,
+       se mantiene la carpeta de la app.
+    """
+    root = app_root()
+
+    # Marcador explicito para forzar modo portable
+    if (root / "portable").is_file() or (root / "portable.dat").is_file():
+        return root
+
+    # Solo evaluar redireccion a %APPDATA% cuando corre empaquetada como .exe
+    if getattr(sys, "frozen", False):
+        system_roots = [
+            os.environ.get("ProgramFiles", "").lower(),
+            os.environ.get("ProgramFiles(x86)", "").lower(),
+            os.environ.get("ProgramW6432", "").lower(),
+            os.environ.get("ProgramData", "").lower(),
+        ]
+        root_str = str(root).lower()
+        is_in_system = any(s and root_str.startswith(s) for s in system_roots)
+
+        is_writable = False
+        if not is_in_system:
+            test_file = root / f".write_test_{os.getpid()}.tmp"
+            try:
+                test_file.write_text("test", encoding="utf-8")
+                test_file.unlink(missing_ok=True)
+                is_writable = True
+            except OSError:
+                is_writable = False
+
+        if is_in_system or not is_writable:
+            appdata = os.environ.get("APPDATA")
+            if not appdata:
+                appdata = str(Path.home() / "AppData" / "Roaming")
+            data_dir = Path(appdata) / "Music-App"
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            # Si el usuario aun no tiene config.json, sembrar desde plantilla inicial
+            user_config = data_dir / "config.json"
+            if not user_config.is_file():
+                template = root / "config_template.json"
+                if not template.is_file():
+                    template = root / "config.json"
+                if template.is_file():
+                    try:
+                        import shutil
+                        shutil.copy2(str(template), str(user_config))
+                    except OSError:
+                        pass
+            return data_dir
+
+    return root
+
+
 def _audio_selftest(log) -> int:
     """Autotest headless del motor de audio (MUSICAPP_SELFTEST_AUDIO=1).
 
@@ -58,10 +121,11 @@ def main() -> int:
     from app.ui.main_window import MainWindow
 
     root = app_root()
-    # Ubicacion fija del log para monitoreo: dist\Music-App\musicapp.log. Incluso al
-    # ejecutar desde el codigo fuente (no empaquetado) se escribe en la misma carpeta
-    # del .exe de produccion, salvo que esa carpeta no exista aun.
-    log_base = root
+    data_dir = user_data_dir()
+
+    # Ubicacion del log: en data_dir si esta instalado/empaquetado, o en dist\Music-App
+    # durante desarrollo si existe dicha carpeta para facilitar monitoreo.
+    log_base = data_dir
     if not getattr(sys, "frozen", False):
         dist_log = root / "dist" / "Music-App"
         if dist_log.is_dir():
@@ -71,16 +135,42 @@ def main() -> int:
     log = logs.get_logger("main")
     log.info("=== INICIO Music-App ===")
     log.info("raiz de la app: %s | empaquetado: %s", root, bool(getattr(sys, "frozen", False)))
+    log.info("directorio de datos: %s", data_dir)
     log.info("log: %s", log_path)
     log.info("python: %s", sys.version)
 
     if os.environ.get("MUSICAPP_SELFTEST_AUDIO"):
         return _audio_selftest(log)
 
+    # Configurar identificador de aplicacion en Windows para la barra de tareas
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MusicApp.WL.1.0")
+        except Exception:
+            pass
+
     app = QApplication(sys.argv)
     app.setApplicationName("Music-App")
     app.setOrganizationName("Music-App")
     app.setStyle("Fusion")
+
+    # Cargar y establecer icono de la aplicacion (W ⚡ L)
+    from PyQt6.QtGui import QIcon
+    icon_candidates = [
+        root / "assets" / "icon.ico",
+        root / "assets" / "icon.png",
+        root / "icon.ico",
+        root / "icon.png",
+    ]
+    app_icon = None
+    for cand in icon_candidates:
+        if cand.is_file():
+            app_icon = QIcon(str(cand))
+            if not app_icon.isNull():
+                break
+    if app_icon and not app_icon.isNull():
+        app.setWindowIcon(app_icon)
 
     # Actividad de UI para el watchdog + vigila por si el hilo se bloquea
     logs.install_activity_filter(app)
@@ -97,10 +187,8 @@ def main() -> int:
 
     from app.ui.theme import apply_theme
 
-    # Config persistente portable: junto al .exe (o en la raiz del proyecto al correr
-    # desde el codigo fuente). El build repone una plantilla con campos vacios si falta,
-    # de modo que el usuario configure sus datos desde ⚙ Config.
-    config = ConfigManager(root)
+    # Config persistente: se almacena en data_dir (modo portable o %APPDATA%)
+    config = ConfigManager(data_dir)
     log.info("config %s: carpeta_base=%r temporal=%r raiz_nav=%r", config.path,
              config.carpeta_base, config.carpeta_temporal, config.raiz_navegacion)
     log.info("version %s | tema %s", config.version, config.tema)

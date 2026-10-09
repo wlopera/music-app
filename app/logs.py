@@ -21,15 +21,28 @@ _LOG_FILE_NAME = "musicapp.log"
 _HEARTBEAT = {"ts": 0.0, "label": "inicio"}
 _fault_file: Optional[object] = None
 _watchdog_thread: Optional[threading.Thread] = None
+_CURRENT_LOG_PATH: Optional[Path] = None
+
+
+def current_log_path() -> Optional[Path]:
+    """Ruta al archivo activo de logs (None si aun no se ha inicializado)."""
+    return _CURRENT_LOG_PATH
 
 
 def log_path_for(base_dir: Path) -> Path:
-    return base_dir / _LOG_FILE_NAME
+    return Path(base_dir) / _LOG_FILE_NAME
 
 
 def setup_logging(base_dir: Path) -> Path:
     """Configura el logger raiz 'musicapp' y devuelve la ruta del archivo de log."""
+    global _CURRENT_LOG_PATH
+    base_dir = Path(base_dir)
+    try:
+        base_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     path = log_path_for(base_dir)
+    _CURRENT_LOG_PATH = path
     root = logging.getLogger("musicapp")
     root.setLevel(logging.DEBUG)
     for h in list(root.handlers):

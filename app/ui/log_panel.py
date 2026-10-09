@@ -191,11 +191,15 @@ class LogPanel(QWidget):
     def _preload_recent_logs(self) -> None:
         """Carga las últimas líneas del archivo de log si ya existe en disco."""
         try:
-            # Buscar musicapp.log junto a la app o en dist
-            candidates = [
+            # Buscar musicapp.log en la ruta activa o en rutas de respaldo
+            candidates = []
+            active = logs.current_log_path()
+            if active and active.is_file():
+                candidates.append(active)
+            candidates.extend([
                 Path("musicapp.log"),
                 Path("dist/Music-App/musicapp.log"),
-            ]
+            ])
             for log_file in candidates:
                 if log_file.is_file():
                     with open(log_file, "r", encoding="utf-8", errors="ignore") as f:

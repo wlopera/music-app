@@ -592,7 +592,7 @@ class SearchView(QWidget):
         if plan.singles:
             bits.append(f"{plan.singles} único(s) se quedan en su sitio")
         if plan.ignored:
-            bits.append(f"{len(plan.ignored)} vídeo(s) ignorado(s) (sin ffmpeg en el MVP)")
+            bits.append(f"{len(plan.ignored)} vídeo(s) omitido(s) (solo canciones en esta opción)")
         if plan.errors:
             bits.append(f"{len(plan.errors)} sin analizar")
         self.resume_label.setText(" · ".join(bits))

@@ -584,7 +584,7 @@ QPushButton#navItem {
     color: #9CA3AF;
     font-size: 10pt;
     text-align: left;
-    padding: 11px 12px;
+    padding: 3px 6px;
 }
 QPushButton#navItem:hover {
     background-color: #1F2937;
@@ -592,6 +592,37 @@ QPushButton#navItem:hover {
 }
 QPushButton#navItem:checked {
     background-color: rgba(59, 130, 246, 0.18);
+    color: #60A5FA;
+    font-weight: 600;
+}
+QLabel#navIcon {
+    background: transparent;
+    font-size: 11pt;
+}
+QLabel#navIconMusic {
+    background-color: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    padding: 1px 4px;
+    font-size: 11pt;
+}
+QPushButton#navItem:hover QLabel#navIconMusic {
+    background-color: rgba(255, 255, 255, 0.28);
+    border-color: rgba(255, 255, 255, 0.55);
+}
+QPushButton#navItem:checked QLabel#navIconMusic {
+    background-color: rgba(96, 165, 250, 0.32);
+    border-color: #60A5FA;
+}
+QLabel#navItemText {
+    background: transparent;
+    color: #9CA3AF;
+    font-size: 10pt;
+}
+QPushButton#navItem:hover QLabel#navItemText {
+    color: #E5E7EB;
+}
+QPushButton#navItem:checked QLabel#navItemText {
     color: #60A5FA;
     font-weight: 600;
 }

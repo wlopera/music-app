@@ -4,7 +4,10 @@ La ventana es frameless, así que esta barra también hace de título arrastrabl
 (doble clic = maximizar/restaurar).
 """
 
+import sys
+from pathlib import Path
 from PyQt6.QtCore import QPoint, Qt, pyqtSignal
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
 from app.ui import icons
@@ -13,7 +16,7 @@ _APP_TITLE = "Music-App"
 
 
 class WindowHeader(QWidget):
-    """Barra superior fija: 🎵 Music-App | botones comunes | min/max/close."""
+    """Barra superior fija: [Logo W ⚡ L] Music-App | botones comunes | min/max/close."""
 
     themeRequested = pyqtSignal()
     settingsRequested = pyqtSignal()
@@ -30,11 +33,12 @@ class WindowHeader(QWidget):
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(14, 5, 6, 5)
-        lay.setSpacing(6)
+        lay.setSpacing(8)
 
-        mark = QLabel("🎵")
-        mark.setObjectName("headerMark")
-        lay.addWidget(mark)
+        self.mark = QLabel()
+        self.mark.setObjectName("headerLogoText")
+        self.mark.setTextFormat(Qt.TextFormat.RichText)
+        lay.addWidget(self.mark)
 
         title = QLabel(_APP_TITLE)
         title.setObjectName("headerTitle")
@@ -77,8 +81,18 @@ class WindowHeader(QWidget):
         self.theme_btn.setIcon(icons.theme_icon(mode, 16))
         if mode == "dark":
             self.theme_btn.setToolTip("Cambiar a tema claro (sol)")
+            self.mark.setText(
+                "<span style='color: #F8FAFC; font-weight: 800; font-size: 11pt;'>W</span> "
+                "<span style='color: #FBBF24; font-size: 12pt;'>⚡</span> "
+                "<span style='color: #F8FAFC; font-weight: 800; font-size: 11pt;'>L</span>"
+            )
         else:
             self.theme_btn.setToolTip("Cambiar a tema oscuro (luna)")
+            self.mark.setText(
+                "<span style='color: #1E293B; font-weight: 800; font-size: 11pt;'>W</span> "
+                "<span style='color: #D97706; font-size: 12pt;'>⚡</span> "
+                "<span style='color: #1E293B; font-weight: 800; font-size: 11pt;'>L</span>"
+            )
 
     # --- Arrastre de la ventana (titlebar manual) -------------------------
     def mousePressEvent(self, event) -> None:

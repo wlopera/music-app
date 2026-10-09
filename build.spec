@@ -18,11 +18,14 @@ multim_dir = QT6 / "plugins" / "multimedia"
 for dll in multim_dir.glob("*.dll"):
     multimedia_binaries.append((str(dll), "PyQt6/Qt6/plugins/multimedia"))
 
-# QSS de los temas (data)
+# QSS de los temas (data) y assets (icono)
 theme_files = [
     (str(ROOT / "app" / "ui" / "theme.qss"), "app/ui"),
     (str(ROOT / "app" / "ui" / "theme_dark.qss"), "app/ui"),
 ]
+if (ROOT / "assets").is_dir():
+    for asset_file in (ROOT / "assets").glob("*.*"):
+        theme_files.append((str(asset_file), "assets"))
 
 # Modulos pesados y ajenos que se excluyen del bundle (reducen tamano)
 EXCLUDES = [
@@ -86,6 +89,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(ROOT / "assets" / "icon.ico") if (ROOT / "assets" / "icon.ico").is_file() else None,
 )
 
 coll = COLLECT(

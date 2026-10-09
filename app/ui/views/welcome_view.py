@@ -90,7 +90,7 @@ class WelcomeView(QWidget):
         title.setStyleSheet("font-size: 20pt; letter-spacing: 4px; padding-left: 0;")
         root.addWidget(title)
 
-        subtitle = QLabel("Gestor de versiones musicales · audio")
+        subtitle = QLabel("Gestor de versiones musicales · audio/video")
         subtitle.setObjectName("mutedLabel")
         subtitle.setStyleSheet("font-size: 11pt;")
         root.addWidget(subtitle)

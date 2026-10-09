@@ -36,12 +36,32 @@ class Sidebar(QWidget):
 
         self._buttons: list[QPushButton] = []
         for index, (emoji, text) in enumerate(_ITEMS):
-            btn = QPushButton(f"{emoji}   {text}")
+            btn = QPushButton()
             btn.setCheckable(True)
             btn.setObjectName("navItem")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(text)
             btn.clicked.connect(lambda _=False, i=index: self.navigated.emit(i))
+
+            btn_lay = QHBoxLayout(btn)
+            btn_lay.setContentsMargins(12, 8, 12, 8)
+            btn_lay.setSpacing(10)
+
+            icon_lbl = QLabel(emoji)
+            icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            if emoji == "🎵":
+                icon_lbl.setObjectName("navIconMusic")
+            else:
+                icon_lbl.setObjectName("navIcon")
+
+            text_lbl = QLabel(text)
+            text_lbl.setObjectName("navItemText")
+            text_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+            btn_lay.addWidget(icon_lbl)
+            btn_lay.addWidget(text_lbl)
+            btn_lay.addStretch(1)
+
             self._group.addButton(btn, index)
             self._buttons.append(btn)
             lay.addWidget(btn)
