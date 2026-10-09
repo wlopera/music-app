@@ -33,19 +33,21 @@ _SECTIONS: list[tuple[str, str]] = [
      "de cada canción.<br>"
      "<i>Los archivos originales de origen nunca se tocan: solo se trabaja con las "
      "copias del staging.</i>"),
-    ("🔍  BUSCAR CANCIONES — detecta duplicados y variantes",
-     "Analiza una carpeta completa y agrupa las pistas que suenan igual o muy "
-     "parecido, trasladando cada grupo a su propia carpeta <b>carpeta_1</b>, "
-     "<b>carpeta_2</b> …<br>"
-     "<b>1.</b> Pulsa <b>…</b> y elige la carpeta (<i>universo</i>) que quieres analizar.<br>"
-     "<b>2.</b> Ajusta la <b>Sensibilidad</b> entre <b>Amplio</b> (más grupos) y "
-     "<b>Preciso</b> (solo casi idénticas).<br>"
-     "<b>3.</b> <b>ANALIZAR UNIVERSO DE AUDIO</b>: se procesa únicamente audio "
-     "(<i>.mp3, .wav, .opus, .flac, .ogg, .aiff, .aif</i>); los vídeos se ignoran.<br>"
-     "<b>4.</b> Revisa la previsualización de grupos y la lista de pistas <b>únicas</b>.<br>"
-     "<b>5.</b> <b>EJECUTAR GRUPOS</b>: mueve cada grupo a su carpeta de forma "
-     "<i>transaccional</i> (con reversión ante error). Las pistas únicas se quedan "
-     "donde están."),
+    ("🔍  BUSCAR CANCIONES — detecta y organiza canciones repetidas",
+     "Escanea una carpeta y agrupa automáticamente las pistas con la misma "
+     "composición o huella acústica en subcarpetas separadas (<b>carpeta_1</b>, "
+     "<b>carpeta_2</b>…), manteniendo intactas las canciones únicas en la raíz.<br>"
+     "<b>1.</b> Pulsa <b>Examinar…</b> y selecciona la carpeta que deseas estudiar.<br>"
+     "<b>2.</b> Ajusta la <b>Sensibilidad</b> acústica (recomendado: <b>98.5% Equilibrado</b>) "
+     "según el rigor de coincidencia deseado.<br>"
+     "<b>3.</b> Pulsa <b>Analizar Canciones</b> para procesar el audio "
+     "(formatos <i>.mp3, .wav, .opus, .flac, .ogg, .aiff</i>; límites: máx. 100 archivos y 150 MB por pista).<br>"
+     "<b>4.</b> Revisa los grupos y las canciones únicas: pulsa <b>▶</b> o haz <b>doble clic</b> "
+     "en cualquier fila para escuchar la canción con el reproductor integrado.<br>"
+     "<b>5.</b> Puedes pulsar <b>Copiar Plan</b> para copiar el reporte de coincidencias o "
+     "<b>Limpiar</b> para reiniciar la vista.<br>"
+     "<b>6.</b> Pulsa <b>Mover Canciones</b>: traslada de forma segura solo las pistas duplicadas "
+     "a sus subcarpetas correspondientes. <i>Las canciones únicas permanecen siempre en la raíz.</i>"),
 ]
 
 

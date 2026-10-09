@@ -64,7 +64,6 @@ class AudioProfile:
     onsets_per_beat: Optional[float] = None
     beats: int = 0
     error: Optional[str] = None
-    lyrics: Optional[str] = None
 
 
 @dataclass
@@ -166,14 +165,11 @@ def extract_profile(path: Path) -> AudioProfile:
             return AudioProfile(path=path, name=path.name, duration=duration,
                                 error="sin contenido espectral aprovechable")
         onsets = librosa.onset.onset_detect(y=y, sr=sr)
-        from app.lyrics import read_lyrics
-        lyr = read_lyrics(path)
         return AudioProfile(
             path=path, name=path.name, duration=duration,
             vector=(vec / norm).tolist(),
             onsets_per_beat=float(len(onsets)) / n_beats if n_beats >= 2 else None,
             beats=n_beats,
-            lyrics=lyr,
         )
     except Exception as exc:  # archivo corrupto / formato no soportado
         logger.warning("no se pudo analizar %s: %s", path.name, exc)
@@ -274,12 +270,6 @@ def build_plan(analysis: Analysis, theta: float = 0.985, prefix: str = "carpeta_
                             possible = False
                             break
                         sim = _cosine(a, b)
-                        # Criterio C (Letra): si ambas tienen letra y coincide >= 80%, refuerza la unión
-                        if a.lyrics and b.lyrics:
-                            from app.lyrics import lyrics_similarity
-                            lyr_sim = lyrics_similarity(a.lyrics, b.lyrics)
-                            if lyr_sim >= 0.80:
-                                sim = max(sim, lyr_sim)
                         if sim < theta:
                             possible = False
                             break

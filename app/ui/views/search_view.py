@@ -56,14 +56,6 @@ class _SongRowWidget(QFrame):
         lbl.setObjectName("mutedLabel")
         lay.addWidget(lbl, 1)
 
-        # Botón Letra
-        self.lyrics_btn = QPushButton("📝 Letra")
-        self.lyrics_btn.setObjectName("logActionBtn")
-        self.lyrics_btn.setToolTip("Ver letra nativa o registrar archivo")
-        self.lyrics_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.lyrics_btn.clicked.connect(self._open_lyrics)
-        lay.addWidget(self.lyrics_btn)
-
         # Botón Play
         self.play_btn = QPushButton("▶")
         self.play_btn.setObjectName("logActionBtn")
@@ -81,11 +73,6 @@ class _SongRowWidget(QFrame):
         from app.ui.media_modal import MediaModal
         modal = MediaModal(self.profile.path, self.window())
         modal.show()
-
-    def _open_lyrics(self) -> None:
-        from app.ui.lyrics_modal import LyricsModal
-        dlg = LyricsModal(self.profile.name, self.profile.lyrics, self.window())
-        dlg.exec()
 
 
 class SearchView(QWidget):
