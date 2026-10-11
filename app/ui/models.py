@@ -185,4 +185,8 @@ class FilterProxy(QSortFilterProxyModel):
         lr = src.rows[left.row()]
         rr = src.rows[right.row()]
         fn = src.sortKeyForColumn(col)
-        return fn(lr) < fn(rr)
+        val_l = fn(lr)
+        val_r = fn(rr)
+        if val_l != val_r:
+            return val_l < val_r
+        return lr["name"].lower() < rr["name"].lower()

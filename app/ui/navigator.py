@@ -43,6 +43,9 @@ class _DragTree(QTreeWidget):
         joined = "\x00".join(str(p) for p in paths) + "\x00"
         mime.setData(_OLE_FNAME_W, QByteArray(joined.encode("utf-16-le")))
         mime.setData(_OLE_FNAME, QByteArray(joined.encode("cp1252", "replace")))
+        drag.setMimeData(mime)
+        drag.exec(actions, Qt.DropAction.CopyAction)
+
     def keyPressEvent(self, event) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_F2:
             parent_nav = self.parent()

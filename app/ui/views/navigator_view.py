@@ -124,16 +124,91 @@ class MediaFilterProxy(QSortFilterProxyModel):
 
         return True
 
+    def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:  # noqa: N802
+        """Ordenamiento preciso estilo Windows Explorer: carpetas arriba, tamaño numérico y fechas reales."""
+        src = self.sourceModel()
+        if not isinstance(src, QFileSystemModel):
+            return super().lessThan(left, right)
+
+        info_left = src.fileInfo(left)
+        info_right = src.fileInfo(right)
+        col = left.column()
+
+        # Carpetas siempre agrupadas arriba (tanto en orden ascendente como descendente)
+        is_dir_left = info_left.isDir()
+        is_dir_right = info_right.isDir()
+        if is_dir_left != is_dir_right:
+            if self.sortOrder() == Qt.SortOrder.AscendingOrder:
+                return is_dir_left
+            else:
+                return not is_dir_left
+
+        if col == 1:  # Tamaño numérico (bytes)
+            if not is_dir_left and not is_dir_right:
+                sz_l = info_left.size()
+                sz_r = info_right.size()
+                if sz_l != sz_r:
+                    return sz_l < sz_r
+        elif col == 2:  # Tipo (extensión)
+            type_l = (info_left.suffix() or info_left.fileName()).lower()
+            type_r = (info_right.suffix() or info_right.fileName()).lower()
+            if type_l != type_r:
+                return type_l < type_r
+        elif col == 3:  # Fecha de creación (cronológico real en milisegundos)
+            dt_l = info_left.birthTime()
+            dt_r = info_right.birthTime()
+            t_l = dt_l.toMSecsSinceEpoch() if dt_l.isValid() and dt_l.toSecsSinceEpoch() > 0 else 0
+            t_r = dt_r.toMSecsSinceEpoch() if dt_r.isValid() and dt_r.toSecsSinceEpoch() > 0 else 0
+            if t_l == 0 or t_r == 0:
+                try:
+                    if t_l == 0:
+                        t_l = int(os.stat(info_left.filePath()).st_ctime * 1000)
+                    if t_r == 0:
+                        t_r = int(os.stat(info_right.filePath()).st_ctime * 1000)
+                except Exception:
+                    pass
+            if t_l != t_r:
+                return t_l < t_r
+
+        # Columna 0 (Nombre) o empate: alfabético insensible a mayúsculas
+        return info_left.fileName().lower() < info_right.fileName().lower()
+
 
 class _CustomFileSystemModel(QFileSystemModel):
-    """Modelo de sistema de archivos con encabezados traducidos al español."""
+    """Modelo de sistema de archivos con encabezados y formatos estándar en español."""
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole):  # noqa: N802
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            headers = ["Nombre", "Tamaño", "Tipo", "Fecha de modificación"]
+            headers = ["Nombre", "Tamaño", "Tipo", "Fecha de creación"]
             if 0 <= section < len(headers):
                 return headers[section]
         return super().headerData(section, orientation, role)
+
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):  # noqa: N802
+        if not index.isValid():
+            return None
+        col = index.column()
+        if role == Qt.ItemDataRole.DisplayRole:
+            if col == 1:
+                # Tamaño: carpetas vacías, archivos formateados en KB / MB (sin KiB / MiB)
+                info = self.fileInfo(index)
+                if info.isDir():
+                    return ""
+                return fsutil.human_size(info.size())
+            elif col == 3:
+                # Fecha de creación con formato dd/mm/yyyy HH:mm
+                info = self.fileInfo(index)
+                dt = info.birthTime()
+                if dt.isValid() and dt.toSecsSinceEpoch() > 0:
+                    return dt.toString("dd/MM/yyyy HH:mm")
+                try:
+                    st = os.stat(info.filePath())
+                    return fsutil.format_timestamp(st.st_ctime)
+                except Exception:
+                    return "—"
+        elif role == Qt.ItemDataRole.TextAlignmentRole and col == 1:
+            return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        return super().data(index, role)
 
 
 class _DraggableDetailView(QTreeView):
@@ -526,10 +601,14 @@ class NavigatorView(QWidget):
         # Ajustes de cabecera y anchos
         hdr = self.detail_view.header()
         hdr.setStretchLastSection(True)
+        hdr.setSortIndicatorShown(True)
+        hdr.setSectionsClickable(True)
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.detail_view.setSortingEnabled(True)
+        self.detail_view.sortByColumn(0, Qt.SortOrder.AscendingOrder)
 
         # Conectar eventos de la vista
         self.detail_view.doubleClicked.connect(self._on_detail_double_clicked)

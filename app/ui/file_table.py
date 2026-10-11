@@ -172,6 +172,8 @@ class FileTableView(QTableView):
         hh = self.horizontalHeader()
         hh.setHighlightSections(False)
         hh.setStretchLastSection(False)
+        hh.setSortIndicatorShown(True)
+        hh.setSectionsClickable(True)
         # Columnas ajustables con el raton (arrastrar los separadores de la cabecera)
         hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         for col, w in ((0, 240), (1, 150), (2, 150), (3, 60), (4, 90), (5, 220)):

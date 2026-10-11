@@ -66,5 +66,6 @@ class Sidebar(QWidget):
 
     def sync_theme(self, mode: str) -> None:
         """Actualiza el icono dinámico de la nota musical según el tema."""
-        if len(self._buttons) > 1:
-            self._buttons[1].setIcon(icons.music_note_icon(mode, 18))
+        for btn in self._buttons:
+            if btn.toolTip() == "Agrupar Temas":
+                btn.setIcon(icons.music_note_icon(mode, 18))

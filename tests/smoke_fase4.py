@@ -34,7 +34,7 @@ def _build_wav(path: Path) -> None:
 def test_modal() -> None:
     from PyQt6.QtWidgets import QApplication
     from app.ui.theme import apply_theme
-    from app.ui.media_modal import MediaModal, _WaveformWidget
+    from app.ui.media_modal import MediaModal
 
     app = QApplication.instance() or QApplication(sys.argv)
     apply_theme(app)

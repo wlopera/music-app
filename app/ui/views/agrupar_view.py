@@ -639,9 +639,14 @@ class AgruparView(QWidget):
         self._set_status(f"Archivo: {Path(path).name}", 2500)
 
     def _copy_to_staging(self, paths) -> None:
+        if not self.staging.directory:
+            self._set_status("Configura la carpeta base o temporal en ⚙ Config antes de copiar al staging.", 5000)
+            return
         added = self.staging.copy_paths(list(paths))
         if added:
             self._set_status(f"{added} copia(s) agregada(s) al staging.", 4000)
+        else:
+            self._set_status("No se pudo copiar ningún archivo al staging (verifica las extensiones permitidas).", 4000)
 
     def _show_song_folder(self, folder: Path) -> None:
         with logs.track(logger, f"mostrar carpeta {folder}"):

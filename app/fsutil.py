@@ -36,7 +36,7 @@ def get_modification_time(path: os.PathLike | str) -> float:
 
 def format_timestamp(ts: float) -> str:
     try:
-        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+        return datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M")
     except (OverflowError, OSError, ValueError):
         return "—"
 
