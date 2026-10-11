@@ -7,6 +7,7 @@ from app.ui import icons
 
 _ITEMS: tuple[tuple[str, str], ...] = (
     ("🏠", "Inicio"),
+    ("📁", "Navegador"),
     ("🎵", "Agrupar Temas"),
     ("🔍", "Buscar Canciones"),
 )

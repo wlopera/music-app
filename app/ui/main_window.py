@@ -17,11 +17,11 @@ from app.ui.footer import WindowFooter
 from app.ui.header import WindowHeader
 from app.ui.log_panel import LogPanel
 from app.ui.sidebar import Sidebar
-from app.ui.views import AgruparView, SearchView, WelcomeView
+from app.ui.views import AgruparView, NavigatorView, SearchView, WelcomeView
 
 logger = logs.get_logger("main_window")
 
-_VIEWS: tuple[str, ...] = ("Inicio", "Agrupar Temas", "Buscar Canciones")
+_VIEWS: tuple[str, ...] = ("Inicio", "Navegador", "Agrupar Temas", "Buscar Canciones")
 
 
 class MainWindow(QMainWindow):
@@ -57,11 +57,13 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stack.setObjectName("viewStack")
         self.welcome_view = WelcomeView(config)
+        self.navigator_view = NavigatorView(config)
         self.agrupar = AgruparView(config)
         self.search_view = SearchView(config)
-        self.stack.addWidget(self.welcome_view)   # índice 0: vista por defecto
-        self.stack.addWidget(self.agrupar)        # índice 1
-        self.stack.addWidget(self.search_view)    # índice 2
+        self.stack.addWidget(self.welcome_view)    # índice 0: vista por defecto
+        self.stack.addWidget(self.navigator_view)  # índice 1: Navegador (debajo de Inicio)
+        self.stack.addWidget(self.agrupar)         # índice 2: Agrupar Temas
+        self.stack.addWidget(self.search_view)     # índice 3: Buscar Canciones
         body_lay.addWidget(self.stack, 1)
 
         root.addWidget(body, 1)
@@ -84,6 +86,7 @@ class MainWindow(QMainWindow):
         self.header.minimizeRequested.connect(self.showMinimized)
         self.header.maximizeRequested.connect(self._toggle_maximize)
         self.header.closeRequested.connect(self.close)
+        self.navigator_view.statusMessage.connect(self._set_status)
         self.agrupar.statusMessage.connect(self._set_status)
         self.search_view.statusMessage.connect(self._set_status)
 
@@ -123,6 +126,7 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self.config, self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self.agrupar.apply_config()
+            self.navigator_view.apply_config()
             self._set_status("Configuración guardada.", 4000)
             logger.info("configuracion guardada y aplicada")
         else:

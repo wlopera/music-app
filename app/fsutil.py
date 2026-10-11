@@ -198,3 +198,67 @@ def set_creation_time_windows(path: os.PathLike | str, epoch_ts: float) -> bool:
     if not ok:
         logger.warning("set_creation_time fallo (SetFileTime) en %s", path)
     return ok
+
+
+# --- Papelera de Reciclaje de Windows -------------------------------------------
+class _SHFILEOPSTRUCTW(ctypes.Structure):
+    _fields_ = [
+        ('hwnd', wintypes.HWND),
+        ('wFunc', wintypes.UINT),
+        ('pFrom', wintypes.LPCWSTR),
+        ('pTo', wintypes.LPCWSTR),
+        ('fFlags', ctypes.c_uint16),
+        ('fAnyOperationsAborted', wintypes.BOOL),
+        ('hNameMappings', wintypes.LPVOID),
+        ('lpszProgressTitle', wintypes.LPCWSTR)
+    ]
+
+_FO_DELETE = 3
+_FOF_ALLOWUNDO = 0x0040        # Enviar a la Papelera de Reciclaje de Windows
+_FOF_NOCONFIRMATION = 0x0010   # Sin diálogo del SO (la app ya pide confirmación)
+_FOF_SILENT = 0x0004           # Sin barra de progreso nativa
+
+
+def send_to_recycle_bin(path: os.PathLike | str) -> bool:
+    """Envía un archivo o carpeta a la Papelera de Reciclaje de Windows.
+
+    Permite al usuario recuperar el elemento en cualquier momento desde Windows.
+    Retorna True si la operación tuvo éxito.
+    """
+    resolved = Path(path).resolve()
+    if not resolved.exists():
+        logger.warning("send_to_recycle_bin: elemento no existe %s", resolved)
+        return False
+
+    if not _windll():
+        try:
+            if resolved.is_dir():
+                import shutil
+                shutil.rmtree(resolved)
+            else:
+                resolved.unlink()
+            return True
+        except Exception as e:
+            logger.error("error al borrar archivo %s: %s", resolved, e)
+            return False
+
+    try:
+        # La API SHFileOperation requiere que la cadena de ruta termine en doble nulo (\0\0)
+        double_null_path = str(resolved).replace('/', '\\') + '\0\0'
+        fileop = _SHFILEOPSTRUCTW()
+        fileop.hwnd = None
+        fileop.wFunc = _FO_DELETE
+        fileop.pFrom = double_null_path
+        fileop.pTo = None
+        fileop.fFlags = _FOF_ALLOWUNDO | _FOF_NOCONFIRMATION | _FOF_SILENT
+        fileop.fAnyOperationsAborted = False
+        res = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(fileop))
+        ok = (res == 0 and not fileop.fAnyOperationsAborted)
+        if ok:
+            logger.info("elemento enviado a la Papelera de reciclaje: %s", resolved)
+        else:
+            logger.warning("SHFileOperationW retorno codigo %s para %s", res, resolved)
+        return ok
+    except Exception as exc:
+        logger.error("error enviando a papelera %s: %s", resolved, exc, exc_info=True)
+        return False

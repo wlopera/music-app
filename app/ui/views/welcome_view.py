@@ -10,14 +10,31 @@ from app.config import ConfigManager
 _SECTIONS: list[tuple[str, str]] = [
     ("MUSIC-APP · GUÍA RÁPIDA",
      "Gestor de versiones musicales para Windows. La aplicación se organiza en "
-     "<b>tres secciones</b> que abres desde el <b>menú lateral izquierdo</b>. "
+     "<b>cuatro secciones</b> que abres desde el <b>menú lateral izquierdo</b>. "
      "Antes de empezar, configura tus carpetas en <b>⚙ Config</b> (arriba a la "
      "derecha). El botón <b>luna/sol</b> de la cabecera alterna entre tema "
      "<b>oscuro y claro</b>."),
     ("🏠  INICIO — esta pantalla",
      "Es el punto de partida: muestra esta guía y te orienta. Desde aquí no se "
-     "modifica ningún archivo. Usa el menú lateral para ir a <b>Agrupar Temas</b> "
-     "o <b>Buscar Canciones</b>. Abajo a la derecha verás la <b>versión</b> de la app."),
+     "modifica ningún archivo. Usa el menú lateral para ir a <b>Navegador</b>, "
+     "<b>Agrupar Temas</b> o <b>Buscar Canciones</b>. Abajo a la derecha verás la <b>versión</b> de la app."),
+    ("📁  NAVEGADOR — explorador multimedia y gestión de archivos",
+     "Explorador de dos paneles especializado en tu colección de audio y video con "
+     "estilo Windows Explorer:<br>"
+     "• <b>Árbol de Directorios (Izquierda)</b>: Navegación jerárquica fluida entre carpetas y unidades físicas.<br>"
+     "• <b>Tabla de Contenido (Derecha)</b>: Visualiza Nombre, Tamaño, Tipo y Fecha con ordenación por columnas.<br>"
+     "• <b>Filtrado Inteligente con Comodines</b>: Filtra archivos en tiempo real por texto o patrones glob "
+     "(por ejemplo <code>*.mp3</code>, <code>demo*.mpe</code> o listas como <code>*.mp3, *.wav</code>).<br>"
+     "• <b>Modo Multimedia / Todos los Archivos</b>: Botón en barra y ajuste <code>only_music</code> en configuración "
+     "para alternar entre ver solo audio/video o todos los archivos de tu sistema.<br>"
+     "• <b>Papelera de Reciclaje de Windows</b>: Lo que eliminas se envía a la Papelera de reciclaje de Windows, "
+     "<b>garantizando que siempre puedas recuperarlo</b> en cualquier momento.<br>"
+     "• <b>Menú Contextual y Atajos</b>: Clic derecho o teclado para reproducir, renombrar (<b>F2</b>), "
+     "cortar (<b>Ctrl+X</b>), copiar (<b>Ctrl+C</b>), pegar (<b>Ctrl+V</b>), nueva carpeta (<b>Ctrl+Shift+N</b>) "
+     "y enviar a papelera (<b>Supr</b>).<br>"
+     "• <b>Audición Inmediata</b>: Haz <b>doble clic</b> sobre un archivo de audio o video para reproducirlo al instante "
+     "con el reproductor multimedia integrado.<br>"
+     "• <b>Drag & Drop</b>: Arrastra y suelta archivos cómodamente entre carpetas o hacia otras aplicaciones."),
     ("🎵  AGRUPAR TEMAS — ordena las versiones de una canción",
      "Reúne las grabaciones de una misma canción en una carpeta y las renumera "
      "cronológicamente (<b>Canción_v1.ext</b>, <b>_v2</b> …) conservando siempre la "
@@ -96,7 +113,7 @@ class WelcomeView(QWidget):
         root.addWidget(subtitle)
 
         hint = QLabel("Elige una opción del menú lateral para comenzar:  "
-                      "🏠 Inicio  ·  🎵 Agrupar Temas  ·  🔍 Buscar Canciones")
+                      "🏠 Inicio  ·  📁 Navegador  ·  🎵 Agrupar Temas  ·  🔍 Buscar Canciones")
         hint.setObjectName("welcomeHint")
         hint.setWordWrap(True)
         root.addWidget(hint)

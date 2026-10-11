@@ -3,7 +3,7 @@
 > **Para:** Equipo de Desarrollo (Antigravity)  
 > **De:** Arquitectura & Diseño  
 > **Fecha:** Octubre 2026  
-> **Proyecto:** Music-App v2.0 (Módulo `NavigatorPage` / Índice 3 del QStackedWidget)
+> **Proyecto:** Music-App v2.0 (Módulo `NavigatorView` / Índice 1 del QStackedWidget, ubicado inmediatamente debajo de Inicio)
 
 ---
 
@@ -71,8 +71,8 @@ La página `NavigatorPage(QWidget)` ocupará el espacio completo del contenedor 
 * **Estilo de Selección**: Los elementos seleccionados en ambos paneles deben usar el color de acento suave del tema de la aplicación, evitando los azules chillones nativos de Windows antiguos.
 * **Iconografía**: Uso de iconos vectoriales limpios o emojis unicode estables para diferenciar visualmente carpetas, pistas de audio y archivos de video.
 
-Mantener lo actual de poder oir y ver caciones por icono o por doble click y uso de click derecho dle mouse.
-Del lado derecho tabla de archivos:
-  Nombre, Fecha, tipo, tamaño. acciones (renombrar, oir o ver, borrar)
-Minimalista, practico y bonito.
-Los códigos son referenciales 
+### Requerimientos Confirmados e Implementados:
+1. **Ubicación en el menú**: Inmediatamente debajo de Inicio (`Índice 1` en el sidebar).
+2. **Papelera de reciclaje**: Eliminación segura con recuperación garantizada enviando a la Papelera de Reciclaje de Windows mediante Win32 API (`SHFileOperationW` con flag `FOF_ALLOWUNDO` en `fsutil.send_to_recycle_bin`).
+3. **Documentación en pantalla de Inicio**: Explicado en las tarjetas informativas de `WelcomeView`.
+4. **Interacción y ergonomía**: Diseño minimalista, doble clic para previsualizar/reproducir con `MediaModal`, clic derecho con menú contextual completo y soporte nativo de Drag & Drop OLE/MIME.

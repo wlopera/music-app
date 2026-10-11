@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PyQt6.QtWidgets import (QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
+from PyQt6.QtWidgets import (QCheckBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
                              QLineEdit, QMessageBox, QPushButton, QVBoxLayout)
 
 from app import logs
@@ -46,6 +46,10 @@ class SettingsDialog(QDialog):
         form.addRow("Carpeta temporal", self._wrap(self.temp_edit, temp_btn))
         form.addRow("Extensiones permitidas", self._extensions_edit())
         form.addRow("Raíz de búsqueda", self._wrap(self.nav_edit, nav_btn))
+
+        self.only_music_chk = QCheckBox("Solo mostrar archivos de audio y video en el Navegador")
+        self.only_music_chk.setChecked(self.config.only_music)
+        form.addRow("Filtro Navegador", self.only_music_chk)
         layout.addLayout(form)
 
         hint = QLabel("Carpeta temporal vacía = automática: carpeta_base\\_staging\n"
@@ -109,6 +113,7 @@ class SettingsDialog(QDialog):
         self.config.carpeta_base = base
         self.config.carpeta_temporal = temp
         self.config.raiz_navegacion = nav
+        self.config.only_music = self.only_music_chk.isChecked()
         if exts:
             self.config.extensiones_permitidas = exts
         self.accept()

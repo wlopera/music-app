@@ -17,5 +17,6 @@
         ".aif",
         ".m4a"
     ],
-    "raiz_navegacion": ""
+    "raiz_navegacion": "",
+    "only_music": false
 }

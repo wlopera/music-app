@@ -19,6 +19,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         ".flac", ".ogg", ".aiff", ".aif", ".m4a"
     ],
     "raiz_navegacion": "",
+    "only_music": True,
 }
 
 _STAGING_SUBFOLDER = "_staging"
@@ -130,6 +131,18 @@ class ConfigManager:
         self.data["extensiones_permitidas"] = clean
         self.save()
 
+    @property
+    def only_music(self) -> bool:
+        val = self.data.get("only_music")
+        if val is None:
+            val = self.data.get("onlyMusic", True)
+        return bool(val)
+
+    @only_music.setter
+    def only_music(self, value: bool) -> None:
+        self.data["only_music"] = bool(value)
+        self.save()
+
     # --- Utilidades -------------------------------------------------------------
     def detalles(self) -> dict[str, Any]:
         return {
@@ -138,4 +151,5 @@ class ConfigManager:
             "carpeta_temporal_configurada": bool(self.data.get("carpeta_temporal")),
             "raiz_navegacion": self.raiz_navegacion or "",
             "extensiones_permitidas": self.extensiones_permitidas,
+            "only_music": self.only_music,
         }
