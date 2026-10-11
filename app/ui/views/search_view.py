@@ -52,9 +52,9 @@ class _SongRowWidget(QFrame):
         lay.setContentsMargins(6, 2, 6, 2)
         lay.setSpacing(6)
 
-        lbl = QLabel(f"🎵  {profile.name}  ({_fmt_dur(profile.duration)})")
-        lbl.setObjectName("mutedLabel")
-        lay.addWidget(lbl, 1)
+        self.lbl = QLabel(f"🎵  {profile.name}  ({_fmt_dur(profile.duration)})")
+        self.lbl.setObjectName("mutedLabel")
+        lay.addWidget(self.lbl, 1)
 
         # Botón Play
         self.play_btn = QPushButton("▶")
@@ -64,15 +64,42 @@ class _SongRowWidget(QFrame):
         self.play_btn.clicked.connect(self._play_song)
         lay.addWidget(self.play_btn)
 
+        # Botón Renombrar
+        self.rename_btn = QPushButton("✏️")
+        self.rename_btn.setObjectName("logActionBtn")
+        self.rename_btn.setToolTip("Renombrar archivo")
+        self.rename_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.rename_btn.clicked.connect(self._rename_song)
+        lay.addWidget(self.rename_btn)
+
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self._play_song()
         super().mouseDoubleClickEvent(event)
 
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self)
+        act_play = menu.addAction("▶ Reproducir")
+        act_rename = menu.addAction("✏️ Renombrar…")
+        chosen = menu.exec(event.globalPos())
+        if chosen is act_play:
+            self._play_song()
+        elif chosen is act_rename:
+            self._rename_song()
+
     def _play_song(self) -> None:
         from app.ui.media_modal import MediaModal
         modal = MediaModal(self.profile.path, self.window())
         modal.show()
+
+    def _rename_song(self) -> None:
+        from app.ui.rename_dialog import prompt_rename
+        new_path = prompt_rename(self.profile.path, parent=self.window())
+        if new_path is not None:
+            self.profile.path = new_path
+            self.profile.name = new_path.name
+            self.lbl.setText(f"🎵  {self.profile.name}  ({_fmt_dur(self.profile.duration)})")
 
 
 class SearchView(QWidget):

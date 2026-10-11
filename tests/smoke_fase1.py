@@ -14,7 +14,7 @@ def test_config(tmp: Path) -> None:
     assert cfg.path.is_file(), "config.json no auto-generado"
     assert cfg.extensiones_permitidas == [
         ".mp3", ".wav", ".mp4", ".opus", ".mov", ".avi", ".mkv",
-        ".flac", ".ogg", ".aiff", ".aif"
+        ".flac", ".ogg", ".aiff", ".aif", ".m4a"
     ]
     base = tmp / "base"
     base.mkdir()
@@ -54,6 +54,8 @@ def test_sidecar(tmp: Path) -> None:
     sc2 = Sidecar(tmp)
     assert sc2.get_original_ct("x.mp3") == 1700000000.5
     assert sc2.get_original_ct("y.wav") == 1700000500.0
+    sc2.rename_entry("y.wav", "z.wav")
+    assert Sidecar(tmp).get_original_ct("z.wav") == 1700000500.0
     sc2.remove("x.mp3")
     assert Sidecar(tmp).get_original_ct("x.mp3") is None
     print("OK sidecar")

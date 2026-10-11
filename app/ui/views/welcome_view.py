@@ -42,7 +42,7 @@ _SECTIONS: list[tuple[str, str]] = [
      "<b>2.</b> Ajusta la <b>Sensibilidad</b>: <i>Flexible</i> (97.0%), <b>Recomendado</b> (98.5%) "
      "o <i>Estricto</i> (99.0%, ideal para maquetas y tomas alternativas).<br>"
      "<b>3.</b> Pulsa <b>Analizar Canciones</b> para procesar el audio con aceleración "
-     "multinúcleo adaptable a 1 o múltiples CPUs (formatos <i>.mp3, .wav, .opus, .flac, .ogg, .aiff</i>; "
+     "multinúcleo adaptable a 1 o múltiples CPUs (formatos <i>.mp3, .wav, .opus, .flac, .ogg, .aiff, .m4a</i>; "
      "hasta 150 MB por pista, con confirmación inteligente para lotes grandes de más de 100 archivos).<br>"
      "<b>4.</b> Revisa los grupos y las canciones únicas: pulsa <b>▶</b> o haz <b>doble clic</b> "
      "en cualquier fila para escuchar la canción con el reproductor minimalista integrado.<br>"

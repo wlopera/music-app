@@ -85,7 +85,7 @@ class SettingsDialog(QDialog):
     def _extensions_edit(self):
         self.ext_edit = QLineEdit(", ".join(self.config.extensiones_permitidas))
         self.ext_edit.setObjectName("input")
-        self.ext_edit.setPlaceholderText(".mp3, .wav, .mp4")
+        self.ext_edit.setPlaceholderText(".mp3, .wav, .mp4, .m4a")
         return self.ext_edit
 
     # --- Guardar -------------------------------------------------------------------
@@ -102,7 +102,7 @@ class SettingsDialog(QDialog):
         if exts and not all(e.lower().startswith(".") for e in exts):
             logger.warning("config: extensiones sin punto %r", exts)
             QMessageBox.warning(self, "Extensiones",
-                                "Las extensiones deben llevar punto: .mp3, .wav, .mp4")
+                                "Las extensiones deben llevar punto: .mp3, .wav, .mp4, .m4a")
             return
 
         logger.info("config: guardar base=%r temp=%r nav=%r ext=%r", base, temp, nav, exts)

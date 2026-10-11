@@ -16,7 +16,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "carpeta_temporal": "",
     "extensiones_permitidas": [
         ".mp3", ".wav", ".mp4", ".opus", ".mov", ".avi", ".mkv",
-        ".flac", ".ogg", ".aiff", ".aif"
+        ".flac", ".ogg", ".aiff", ".aif", ".m4a"
     ],
     "raiz_navegacion": "",
 }

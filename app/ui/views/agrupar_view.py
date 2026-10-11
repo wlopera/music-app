@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit,
+from PyQt6.QtWidgets import (QApplication, QButtonGroup, QDialog, QHBoxLayout, QLabel, QLineEdit,
                              QMessageBox, QPushButton, QSizePolicy, QSplitter,
                              QStyle, QToolButton, QVBoxLayout, QWidget)
 
@@ -33,10 +33,15 @@ class AgruparView(QWidget):
         super().__init__(parent)
         self.config = config
         self.last_status = ""
+        self._current_view_mode = "both"
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(14, 14, 14, 14)
         lay.setSpacing(10)
+
+        # Barra superior compacta para seleccionar modo de pantalla / mostrar y ocultar secciones
+        self._build_view_mode_bar()
+        lay.addWidget(self.view_bar)
 
         # QSplitter vertical principal (linea central flexible entre secciones)
         self.main_vertical_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -60,6 +65,46 @@ class AgruparView(QWidget):
         # Ambas se inician expandidas visualmente por defecto
         self.input_panel.set_expanded(True)
         self.library_panel.set_expanded(True)
+
+    def _build_view_mode_bar(self) -> None:
+        """Barra superior con botones para alternar entre vista dividida y pantalla completa."""
+        self.view_bar = QWidget()
+        self.view_bar.setObjectName("viewModeBar")
+        bar_lay = QHBoxLayout(self.view_bar)
+        bar_lay.setContentsMargins(0, 0, 0, 0)
+        bar_lay.setSpacing(8)
+
+        lbl = QLabel("VISTA:")
+        lbl.setObjectName("controlLabel")
+        bar_lay.addWidget(lbl)
+
+        self.btn_view_both = QPushButton("⊞ Ambas (50/50)")
+        self.btn_view_both.setObjectName("btnViewMode")
+        self.btn_view_both.setCheckable(True)
+        self.btn_view_both.setChecked(True)
+        self.btn_view_both.setToolTip("Mostrar Entrada y Biblioteca en vista dividida (50/50)")
+
+        self.btn_view_input = QPushButton("▲ Entrada Completa (Ocultar Biblioteca)")
+        self.btn_view_input.setObjectName("btnViewMode")
+        self.btn_view_input.setCheckable(True)
+        self.btn_view_input.setToolTip("Ocultar Biblioteca para que Entrada ocupe toda la pantalla")
+
+        self.btn_view_library = QPushButton("▼ Biblioteca Completa (Ocultar Entrada)")
+        self.btn_view_library.setObjectName("btnViewMode")
+        self.btn_view_library.setCheckable(True)
+        self.btn_view_library.setToolTip("Ocultar Entrada para que Biblioteca ocupe toda la pantalla")
+
+        bar_lay.addWidget(self.btn_view_both)
+        bar_lay.addWidget(self.btn_view_input)
+        bar_lay.addWidget(self.btn_view_library)
+        bar_lay.addStretch(1)
+
+        self.view_btn_group = QButtonGroup(self)
+        self.view_btn_group.setExclusive(True)
+        self.view_btn_group.addButton(self.btn_view_both, 0)
+        self.view_btn_group.addButton(self.btn_view_input, 1)
+        self.view_btn_group.addButton(self.btn_view_library, 2)
+        self.view_btn_group.idClicked.connect(self._on_view_mode_group_clicked)
 
     # --- Construccion UI -------------------------------------------------------------
     def _build_input_section(self) -> None:
@@ -94,12 +139,20 @@ class AgruparView(QWidget):
         self.delete_sel_btn.setToolTip("Borrar archivos seleccionados del Staging")
         self.delete_sel_btn.clicked.connect(self.staging._delete_selected)
 
+        # Boton Maximizar / Restaurar (Entrada) - Permite ocultar Biblioteca para que Entrada ocupe toda la pantalla
+        self.input_maximize_btn = QToolButton()
+        self.input_maximize_btn.setText("🗖")
+        self.input_maximize_btn.setObjectName("btnIconHeader")
+        self.input_maximize_btn.setToolTip("Maximizar Entrada (Ocultar Biblioteca para usar toda la pantalla)")
+        self.input_maximize_btn.clicked.connect(self._toggle_input_maximized)
+
         # Inyeccion ordenada en el extremo derecho del encabezado de la seccion de Entrada
         # (los botones comunes de la app viven ahora en la cabecera de la ventana)
         if hasattr(self.input_panel, '_header') and self.input_panel._header.layout():
             header_lay = self.input_panel._header.layout()
             header_lay.addWidget(self.clear_all_btn)
             header_lay.addWidget(self.delete_sel_btn)
+            header_lay.addWidget(self.input_maximize_btn)
 
         input_container = QWidget()
         input_layout = QVBoxLayout(input_container)
@@ -171,6 +224,13 @@ class AgruparView(QWidget):
         icon_vaciar = style.standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton)
         icon_borrar = style.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
 
+        # Boton Renombrar (Biblioteca) - Permite editar el nombre de la versión seleccionada
+        self.library_rename_btn = QToolButton()
+        self.library_rename_btn.setText("✏️")
+        self.library_rename_btn.setObjectName("btnIconHeader")
+        self.library_rename_btn.setToolTip("Renombrar el archivo seleccionado de la Biblioteca")
+        self.library_rename_btn.clicked.connect(self._on_library_rename_selected)
+
         # Boton Vaciar Todo (Biblioteca) - Vinculado a la purga de la carpeta fisica de canciones
         self.library_clear_btn = QToolButton()
         self.library_clear_btn.setIcon(icon_vaciar)
@@ -193,12 +253,21 @@ class AgruparView(QWidget):
         self.library_renumber_btn.setToolTip("Renumerar v1..vN (Biblioteca) y ajustar el .musicapp.json")
         self.library_renumber_btn.clicked.connect(self._on_library_renumber)
 
+        # Boton Maximizar / Restaurar (Biblioteca) - Permite ocultar Entrada para que Biblioteca ocupe toda la pantalla
+        self.library_maximize_btn = QToolButton()
+        self.library_maximize_btn.setText("🗖")
+        self.library_maximize_btn.setObjectName("btnIconHeader")
+        self.library_maximize_btn.setToolTip("Maximizar Biblioteca (Ocultar Entrada para usar toda la pantalla)")
+        self.library_maximize_btn.clicked.connect(self._toggle_library_maximized)
+
         # Inyeccion ordenada en el extremo derecho del encabezado de la seccion de Biblioteca
         if hasattr(self.library_panel, '_header') and self.library_panel._header.layout():
             lib_header_lay = self.library_panel._header.layout()
+            lib_header_lay.addWidget(self.library_rename_btn)
             lib_header_lay.addWidget(self.library_clear_btn)
             lib_header_lay.addWidget(self.library_delete_btn)
             lib_header_lay.addWidget(self.library_renumber_btn)
+            lib_header_lay.addWidget(self.library_maximize_btn)
 
         split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(self.folder_list)
@@ -216,23 +285,99 @@ class AgruparView(QWidget):
         table.clickedFile.connect(self._fill_name_from_file)
         table.activatedFile.connect(self._open_media)
         table.contextMenuRequested.connect(self._library_detail_menu)
+        table.renameRequested.connect(self._library_rename_file)
         return table
 
     def _on_input_toggled(self, expanded: bool) -> None:
         """Maneja el colapso y expansion elastica del panel de Entrada."""
         logger.info("entrada %s", "expandida" if expanded else "colapsada")
+        if self._current_view_mode != "both":
+            return
+        total_h = self.main_vertical_splitter.height() or 700
+        collapsed_h = 66
         if expanded:
-            self.main_vertical_splitter.setSizes([350, 350])
+            self.main_vertical_splitter.setSizes([total_h // 2, total_h // 2])
         else:
-            self.main_vertical_splitter.setSizes([0, 700])
+            self.main_vertical_splitter.setSizes([collapsed_h, max(100, total_h - collapsed_h)])
 
     def _on_library_toggled(self, expanded: bool) -> None:
         """Maneja el colapso y expansion elastica del panel de Biblioteca."""
         logger.info("biblioteca %s", "expandida" if expanded else "colapsada")
+        if self._current_view_mode != "both":
+            return
+        total_h = self.main_vertical_splitter.height() or 700
+        collapsed_h = 66
         if expanded:
-            self.main_vertical_splitter.setSizes([350, 350])
+            self.main_vertical_splitter.setSizes([total_h // 2, total_h // 2])
         else:
-            self.main_vertical_splitter.setSizes([700, 0])
+            self.main_vertical_splitter.setSizes([max(100, total_h - collapsed_h), collapsed_h])
+
+    # --- Modos de visualización (Pantalla Completa / Dividida) -----------------------
+    def _set_view_mode(self, mode: str) -> None:
+        """Cambia el modo de visualización entre 'both', 'input', 'library'."""
+        self._current_view_mode = mode
+
+        if mode == "input":
+            # Entrada ocupa toda la pantalla, Biblioteca se oculta
+            self.library_panel.setVisible(False)
+            self.input_panel.setVisible(True)
+            self.input_panel.set_expanded(True)
+
+            self.btn_view_input.setChecked(True)
+            self.input_maximize_btn.setText("🗗")
+            self.input_maximize_btn.setToolTip("Restaurar vista dividida (Mostrar ambas secciones)")
+            self.statusMessage.emit("Entrada en pantalla completa (Biblioteca oculta)", 3000)
+
+        elif mode == "library":
+            # Biblioteca ocupa toda la pantalla, Entrada se oculta
+            self.input_panel.setVisible(False)
+            self.library_panel.setVisible(True)
+            self.library_panel.set_expanded(True)
+
+            self.btn_view_library.setChecked(True)
+            self.library_maximize_btn.setText("🗗")
+            self.library_maximize_btn.setToolTip("Restaurar vista dividida (Mostrar ambas secciones)")
+            self.statusMessage.emit("Biblioteca en pantalla completa (Entrada oculta)", 3000)
+
+        else:  # "both"
+            # Ambas visibles y divididas equilibradamente
+            self.input_panel.setVisible(True)
+            self.library_panel.setVisible(True)
+            self.input_panel.set_expanded(True)
+            self.library_panel.set_expanded(True)
+
+            self.btn_view_both.setChecked(True)
+            self.input_maximize_btn.setText("🗖")
+            self.input_maximize_btn.setToolTip("Maximizar Entrada (Ocultar Biblioteca para ocupar toda la pantalla)")
+            self.library_maximize_btn.setText("🗖")
+            self.library_maximize_btn.setToolTip("Maximizar Biblioteca (Ocultar Entrada para ocupar toda la pantalla)")
+
+            total_h = self.main_vertical_splitter.height() or 700
+            half = total_h // 2
+            self.main_vertical_splitter.setSizes([half, half])
+            self.statusMessage.emit("Vista dividida restaurada (Entrada y Biblioteca)", 2500)
+
+    def _on_view_mode_group_clicked(self, btn_id: int) -> None:
+        if btn_id == 1:
+            new_mode = "both" if self._current_view_mode == "input" else "input"
+            self._set_view_mode(new_mode)
+        elif btn_id == 2:
+            new_mode = "both" if self._current_view_mode == "library" else "library"
+            self._set_view_mode(new_mode)
+        else:
+            self._set_view_mode("both")
+
+    def _toggle_input_maximized(self) -> None:
+        if self._current_view_mode == "input":
+            self._set_view_mode("both")
+        else:
+            self._set_view_mode("input")
+
+    def _toggle_library_maximized(self) -> None:
+        if self._current_view_mode == "library":
+            self._set_view_mode("both")
+        else:
+            self._set_view_mode("library")
 
     def _refresh_counts(self) -> None:
         """Satisface las llamadas de inicializacion y refresca el estado del boton procesar."""
@@ -462,12 +607,30 @@ class AgruparView(QWidget):
         from PyQt6.QtWidgets import QMenu
         menu = QMenu(self)
         if path is not None:
-            act = menu.addAction("▶ Reproducir")
+            act_play = menu.addAction("▶ Reproducir")
+            act_rename = menu.addAction("✏️ Renombrar…")
             res = menu.exec(self.cursor().pos())
-            if res is act:
+            if res is act_play:
                 self._open_media(path)
+            elif res is act_rename:
+                self._library_rename_file(path)
         else:
             menu.addAction("—")
+
+    def _on_library_rename_selected(self) -> None:
+        paths = self.detail.selected_paths()
+        if not paths:
+            QMessageBox.information(self, "Sin selección", "Selecciona una versión de la tabla para renombrarla.")
+            return
+        self._library_rename_file(paths[0])
+
+    def _library_rename_file(self, path: Path) -> None:
+        from app.ui.rename_dialog import prompt_rename
+        new_path = prompt_rename(path, parent=self)
+        if new_path is not None:
+            if self.detail.model.directory:
+                self._show_song_folder(self.detail.model.directory)
+            self._set_status(f"Archivo renombrado a «{new_path.name}».", 4000)
 
     def _fill_name_from_file(self, path) -> None:
         name = Path(path).stem

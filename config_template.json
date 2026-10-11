@@ -14,7 +14,8 @@
         ".flac",
         ".ogg",
         ".aiff",
-        ".aif"
+        ".aif",
+        ".m4a"
     ],
     "raiz_navegacion": ""
 }

@@ -201,6 +201,27 @@ QPushButton#btnAccent:hover {
     border-color: #2563EB;
 }
 
+/* --- Botones de modo de vista (Agrupar Temas) ----------------------------- */
+QPushButton#btnViewMode {
+    background-color: #F8FAFC;
+    color: #64748B;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 8.5pt;
+    font-weight: 600;
+}
+QPushButton#btnViewMode:hover {
+    background-color: #F1F5F9;
+    border-color: #94A3B8;
+    color: #0F172A;
+}
+QPushButton#btnViewMode:checked {
+    background-color: rgba(37, 99, 235, 0.12);
+    border-color: #2563EB;
+    color: #2563EB;
+}
+
 /* --- ToolButtons internos (#card) ---------------------------------------- */
 QToolButton {
     background-color: transparent;

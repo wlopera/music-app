@@ -95,6 +95,18 @@ class Sidecar:
         data["version"] = 2
         self.write(data)
 
+    def rename_entry(self, old_filename: str, new_filename: str) -> None:
+        """Renombra una clave en files preservando su metadata."""
+        if old_filename == new_filename:
+            return
+        data = self.read()
+        files = data.setdefault("files", {})
+        if old_filename in files:
+            files[new_filename] = files.pop(old_filename)
+            data["version"] = 2
+            self.write(data)
+            logger.debug("sidecar: renombrada entrada %s -> %s", old_filename, new_filename)
+
     # --- Helpers: escritura masiva -----------------------------------------------
     def set_many(self, mapping: dict[str, float]) -> None:
         """Compatibilidad: escribe solo original_ct (sin tocar original_name)."""

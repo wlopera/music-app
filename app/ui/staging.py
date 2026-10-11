@@ -58,6 +58,7 @@ class StagingPanel(QWidget):
         self.table.activatedFile.connect(self.openFile.emit)
         self.table.clickedFile.connect(self.fileClicked.emit)
         self.table.contextMenuRequested.connect(self._show_context_menu)
+        self.table.renameRequested.connect(self._rename_path)
         self.table.pathsDropped.connect(self._drop_paths)
         self.table.model.modelReset.connect(self._update_empty_state)
         layout.addWidget(self.table, 1)
@@ -307,12 +308,25 @@ class StagingPanel(QWidget):
     # --- Menu contextual -------------------------------------------------------------
     def _show_context_menu(self, path: Optional[Path]) -> None:
         menu = QMenu(self)
+        act_open = None
+        act_rename = None
         if path is not None:
             act_open = menu.addAction("▶ Reproducir")
+            act_rename = menu.addAction("✏️ Renombrar…")
             menu.addSeparator()
         act_del = menu.addAction("🗑 Borrar seleccionadas")
         chosen = menu.exec(self.cursor().pos())
-        if chosen is act_open:
+        if act_open is not None and chosen is act_open:
             self.openFile.emit(path)
+        elif act_rename is not None and chosen is act_rename:
+            self._rename_path(path)
         elif chosen is act_del:
             self._delete_selected()
+
+    def _rename_path(self, path: Path) -> None:
+        from app.ui.rename_dialog import prompt_rename
+        new_path = prompt_rename(path, parent=self)
+        if new_path is not None:
+            self.refresh()
+            self.stagingChanged.emit()
+            self.statusMessage.emit(f"Archivo renombrado a «{new_path.name}».")

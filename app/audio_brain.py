@@ -36,11 +36,10 @@ from app.sidecar import Sidecar
 
 logger = logs.get_logger("audio_brain")
 
-# Extensiones de audio analizables por librosa/libsndfile (sin ffmpeg). Los
-# formatos de vídeo y los que contienen MPEG-4 (.mp4, .mov, .mkv, .m4a, .aac…)
-# no se pueden decodificar y se listan como ignorados.
+# Extensiones de audio analizables por librosa/libsndfile y audioread (sin ffmpeg).
+# Los formatos de vídeo (.mp4, .mov, .mkv, .avi…) no se pueden decodificar y se listan como ignorados.
 AUDIO_EXTENSIONS: frozenset[str] = frozenset(
-    {".mp3", ".wav", ".opus", ".flac", ".ogg", ".aiff", ".aif"})
+    {".mp3", ".wav", ".opus", ".flac", ".ogg", ".aiff", ".aif", ".m4a"})
 
 # Umbral de tempo para chroma CQT.
 _SAMPLE_RATE = 22050
@@ -139,6 +138,32 @@ def _np() -> "object":
 
 
 # --- Extracción ----------------------------------------------------------------
+def _load_audio(path: Path, sr: int = _SAMPLE_RATE) -> tuple["object", int]:
+    """Carga audio con librosa/soundfile y fallback a audioread (Media Foundation en Windows para .m4a)."""
+    libs = _LIBS
+    librosa, np = libs["librosa"], libs["np"]
+    try:
+        return librosa.load(str(path), sr=sr, mono=True)
+    except Exception as sf_exc:
+        try:
+            import audioread
+            with audioread.audio_open(str(path)) as f:
+                sr_native = f.samplerate
+                channels = f.channels
+                raw_bytes = b"".join(f)
+            if not raw_bytes:
+                raise ValueError("archivo de audio sin datos legibles") from sf_exc
+            data = np.frombuffer(raw_bytes, dtype=np.int16).astype(float) / 32768.0
+            if channels > 1:
+                data = data.reshape(-1, channels).mean(axis=1)
+            if sr is not None and sr != sr_native:
+                data = librosa.resample(data, orig_sr=sr_native, target_sr=sr)
+                return data, sr
+            return data, sr_native
+        except Exception as ar_exc:
+            raise sf_exc from ar_exc
+
+
 def extract_profile(path: Path) -> AudioProfile:
     """Huella de `path`. Nunca lanza: ante cualquier fallo devuelve `error`."""
     ok, why = availability()
@@ -147,7 +172,7 @@ def extract_profile(path: Path) -> AudioProfile:
     libs = _LIBS
     librosa, np = libs["librosa"], libs["np"]
     try:
-        y, sr = librosa.load(str(path), sr=_SAMPLE_RATE, mono=True)
+        y, sr = _load_audio(path, sr=_SAMPLE_RATE)
         duration = float(len(y)) / sr
         if duration < _MIN_DURATION:
             return AudioProfile(path=path, name=path.name, duration=duration,

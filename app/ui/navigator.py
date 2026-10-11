@@ -43,8 +43,13 @@ class _DragTree(QTreeWidget):
         joined = "\x00".join(str(p) for p in paths) + "\x00"
         mime.setData(_OLE_FNAME_W, QByteArray(joined.encode("utf-16-le")))
         mime.setData(_OLE_FNAME, QByteArray(joined.encode("cp1252", "replace")))
-        drag.setMimeData(mime)
-        drag.exec(actions, Qt.DropAction.CopyAction)
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_F2:
+            parent_nav = self.parent()
+            if hasattr(parent_nav, '_rename_selected'):
+                parent_nav._rename_selected()
+                return
+        super().keyPressEvent(event)
 
 
 class FolderNavigator(QWidget):
@@ -97,27 +102,38 @@ class FolderNavigator(QWidget):
         self.filter_edit.textChanged.connect(self._apply_filter)
         layout.addWidget(self.filter_edit)
 
-        # Copiar
-        copy_row = QHBoxLayout()
+        # Acciones superiores (Renombrar + Copiar)
+        action_row = QHBoxLayout()
+        action_row.setSpacing(6)
+        action_row.addStretch(1)
+
+        self.rename_btn = QPushButton("✏️ Renombrar")
+        self.rename_btn.setObjectName("btnOutline")
+        self.rename_btn.setEnabled(False)
+        self.rename_btn.setToolTip("Renombrar el elemento seleccionado (F2)")
+        self.rename_btn.clicked.connect(self._rename_selected)
+        action_row.addWidget(self.rename_btn)
+
         self.copy_btn = QPushButton("Copiar ▸")
         self.copy_btn.setObjectName("btnOutline")
         self.copy_btn.setEnabled(False)
         self.copy_btn.clicked.connect(self._copy_selected)
-        copy_row.addStretch(1)
-        copy_row.addWidget(self.copy_btn)
-        layout.addLayout(copy_row)
+        action_row.addWidget(self.copy_btn)
+        layout.addLayout(action_row)
 
         # Arbol
-        self.tree = _DragTree(self._selected_paths)
+        self.tree = _DragTree(self._selected_paths, parent=self)
         self.tree.setObjectName("treeFolders")
         self.tree.setHeaderHidden(True)
         self.tree.setRootIsDecorated(False)
         self.tree.setDragEnabled(True)
         self.tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         self.tree.setAnimated(True)
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._show_context_menu)
         self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.tree.itemClicked.connect(self._on_item_clicked)
-        self.tree.itemSelectionChanged.connect(self._update_copy_btn)
+        self.tree.itemSelectionChanged.connect(self._update_buttons)
         layout.addWidget(self.tree, 1)
 
     # --- Estado ---------------------------------------------------------------
@@ -294,8 +310,53 @@ class FolderNavigator(QWidget):
                 paths.append(p)
         return paths
 
-    def _update_copy_btn(self) -> None:
+    def _update_buttons(self) -> None:
+        selected = self.tree.selectedItems()
+        self.rename_btn.setEnabled(len(selected) == 1)
         self.copy_btn.setEnabled(bool(self._selected_paths()))
+
+    def _rename_selected(self) -> None:
+        items = self.tree.selectedItems()
+        if len(items) == 1:
+            path = items[0].data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(path, Path):
+                self._rename_path(path)
+
+    def _rename_path(self, path: Path) -> None:
+        from app.ui.rename_dialog import prompt_rename
+        new_path = prompt_rename(path, parent=self)
+        if new_path is not None:
+            self.refresh()
+            self.infoMessage.emit(f"Renombrado a «{new_path.name}».")
+
+    def _show_context_menu(self, pos) -> None:
+        item = self.tree.itemAt(pos)
+        if item is None:
+            return
+        path = item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(path, Path):
+            return
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self)
+        if path.is_file():
+            act_play = menu.addAction("▶ Reproducir")
+            act_rename = menu.addAction("✏️ Renombrar…")
+            act_copy = menu.addAction("Copiar al Staging ▸")
+            chosen = menu.exec(self.tree.viewport().mapToGlobal(pos))
+            if chosen is act_play:
+                self.openFile.emit(path)
+            elif chosen is act_rename:
+                self._rename_path(path)
+            elif chosen is act_copy:
+                self.copyRequested.emit([path])
+        elif path.is_dir():
+            act_enter = menu.addAction("📂 Entrar")
+            act_rename = menu.addAction("✏️ Renombrar…")
+            chosen = menu.exec(self.tree.viewport().mapToGlobal(pos))
+            if chosen is act_enter:
+                self.set_root(path)
+            elif chosen is act_rename:
+                self._rename_path(path)
 
     def _copy_selected(self) -> None:
         paths = self._selected_paths()

@@ -143,6 +143,7 @@ class FileTableView(QTableView):
     activatedFile = pyqtSignal(Path)      # doble clic / Enter
     selectionFilesChanged = pyqtSignal(list)
     contextMenuRequested = pyqtSignal(Path)  # None si clic derecho sobre zona vacia
+    renameRequested = pyqtSignal(Path)       # F2 o solicitud de renombrado
     pathsDropped = pyqtSignal(list)       # rutas soltadas (si accept_file_drops=True)
 
     def __init__(self, extensions: list[str], sidecar_lookup=None, parent=None):
@@ -236,6 +237,11 @@ class FileTableView(QTableView):
         self.selectionFilesChanged.emit(self.selected_paths())
 
     def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_F2:
+            paths = self.selected_paths()
+            if len(paths) == 1:
+                self.renameRequested.emit(paths[0])
+                return
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             self.contextMenuRequested.emit(None)
             return
